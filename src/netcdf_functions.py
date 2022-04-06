@@ -6,7 +6,7 @@ from iris.analysis.cartography import unrotate_pole
 from iris.coords import AuxCoord
 from numpy import meshgrid
 
-def pcolormesh_basemapplot(cube,basemap,vmin,vmax,cmap=None):
+def pcolormesh_basemapplot_cube(cube,basemap,vmin,vmax,cmap=None):
 
     longitudes = cube.coord('longitude').points
     latitudes = cube.coord('latitude').points
@@ -14,6 +14,12 @@ def pcolormesh_basemapplot(cube,basemap,vmin,vmax,cmap=None):
     basemap.readshapefile('/data/climatedata/antarctica_shapefile', 'antarctica_shapefile',linewidth=0.1,antialiased=False,color='k')
     
     return(basemap.pcolormesh(longitudes,latitudes,cube.data,vmin=vmin,vmax=vmax, latlon=True, cmap=cmap, shading = 'nearest',alpha=1))
+
+def pcolormesh_basemapplot_data(data,latitudes,longitudes,basemap,vmin,vmax,cmap=None):
+    
+    basemap.readshapefile('/data/climatedata/antarctica_shapefile', 'antarctica_shapefile',linewidth=0.1,antialiased=False,color='k')
+    
+    return(basemap.pcolormesh(longitudes,latitudes,data,vmin=vmin,vmax=vmax, latlon=True, cmap=cmap, shading = 'nearest',alpha=1))
 
 # import os
 
