@@ -1,12 +1,21 @@
+# Lima Methodology Flow Chart
+
+<img src="Lima_Flow.png" alt="Picture" width="400" height="400" style="display: block; margin: 0 auto" />
+
 # Estimating PDF Parameter Values at Observation Sites
 
 In (Lima, 2021, https://doi.org/10.1016/j.jhydrol.2021.126095) a Bernoulli-Gamma distribution is assumed for daily rainfall, which has the form:
 
-$P(Y_{jk}=y_{jk}) = B(1,p_{jk})\cdot G(y_{jk}|\alpha_{jk},\beta_{jk})$
+\begin{equation}
+    P(Y_{jk}=y_{jk}) = B(1,p_{jk})\cdot G(y_{jk}|\alpha_{jk},\beta_{jk})
+\end{equation}
 
-$B(1,p_{jk})\cdot G(y_{jk}|\alpha_{jk},\beta_{jk}) = \ p_{jk} \cdot \dfrac{{\beta_{jk}}^{\alpha_{jk}} y_{jk}^{\alpha_{jk}-1}e^{-\beta_{jk} y_{jk}}}{\Gamma(\alpha_{jk})} \} \text{Rainfall} $ 
-
-$\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (1-p_{jk}) \ \ \ \ \ \ \ \ \ \ \ \} \text{No Rainfall}$
+\begin{equation}
+\begin{split}
+B(1,p_{jk})\cdot G(y_{jk}|\alpha_{jk},\beta_{jk}) = & \ p_{jk} \cdot \dfrac{{\beta_{jk}}^{\alpha_{jk}} y_{jk}^{\alpha_{jk}-1}e^{-\beta_{jk} y_{jk}}}{\Gamma(\alpha_{jk})} & \} \text{Rainfall} \\
+& (1-p_{jk}) & \} \text{No Rainfall}
+\end{split}
+\end{equation}
 
 The Bernoulli part gives the probability of rainfall (p) or no rainfall (1-p) on a given day at the site \(j\) for month \(k\) and the Gamma part gives the probability of an intensity of rainfall ($y_{jk}$) on that day given rainfall occurs. The gamma distribution has shape parameter $\alpha$ and scale parameter $\beta$. Note: it makes sense to include a Bernoulli term because of the discontinuity expected for the probability of no rainfall. The shape/scale parameters $\alpha$ and $\beta$ are estimated at every rainfall gauge and for each month of the year. 
 
@@ -49,7 +58,9 @@ P(\boldsymbol{y}|\boldsymbol{p,\alpha,\beta}) = \prod_\limits{ijk} B(1,p_{jk})\c
 \end{equation}
 
 \begin{equation}
-Log Likehood = Log(\prod_\limits{ijk} B(1,p_{jk})\cdot G(y_{i}|\alpha_{jk},a_{0k},a_{1k},{\sigma_k}^2)) = \sum_\limits{ijk} Log(B(1,p_{jk})) + \sum_\limits{ijk} Log( G(y_{i}|\alpha_{jk},a_{0k},a_{1k},{\sigma_k}^2))
+\begin{split}
+Log Likehood & = Log(\prod_\limits{ijk} B(1,p_{jk})\cdot G(y_{i}|\alpha_{jk},a_{0k},a_{1k},{\sigma_k}^2)) \\  & = \sum_\limits{ijk} Log(B(1,p_{jk})) + \sum_\limits{ijk} Log( G(y_{i}|\alpha_{jk},a_{0k},a_{1k},{\sigma_k}^2))
+\end{split}
 \end{equation}
 
 MCMC is used to estimate the full posterior distribution $P(\boldsymbol{p,\alpha,\beta}|\boldsymbol{y})$ and works by evaluating the loglikelihood * logpriors for lots of different values of [$p_{jk},\alpha_{jk},a_{0k},a_{1k},{\sigma_k}^2$] and from an acceptance probability working out the normalising constant.
