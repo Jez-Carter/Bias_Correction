@@ -38,6 +38,9 @@ samples = run_inference(bg_gp_model,rng_key_,1000,2000,jsample_data,distance_mat
 samples_array = np.array(list(samples.items()),dtype=object)
 np.save(f'{folder_path}AP_BGGPLima_Snowfall_044_Sample.npy',samples_array)
 
+ds = xr.Dataset.from_dict(samples)
+ds.to_netcdf(f'{folder_path}AP_BGGPLima_Snowfall_044_Sample', 'w')
+
 alpha_mean_estimates = samples['alpha'].mean(axis=(0))
 beta_mean_estimates = samples['beta'].mean(axis=(0))
 p_mean_estimates = samples['p'].mean(axis=(0))
