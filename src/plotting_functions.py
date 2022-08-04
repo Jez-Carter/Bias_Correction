@@ -117,6 +117,35 @@ def plot_observations_df(df,basemap,variable,label):
     c = df[f'{variable}']
     # plt.plot(x,y, 'o', ms=1, markerfacecolor="None",markeredgecolor=color, markeredgewidth=0.1,label=label)
     plt.scatter(x, y, c=c,label=label)#, s=500)
+    
+def pcolormesh_basemapplot(ds,var,metric,basemap,vmin,vmax,cmap=None,alpha=1):
+
+    longitudes = ds.longitude.data
+    latitudes = ds.latitude.data
+    data = ds.sel(metric=metric)[f'{var}'].data
+    # vmin = data.min()
+    # vmax=data.max()
+    
+    shapefile_path = '/data/notebooks/jupyterlab-biascorrlab/data/Antarctica_Shapefile/antarctica_shapefile'
+    basemap.readshapefile(shapefile_path, 'antarctica_shapefile',linewidth=0.1,antialiased=False,color='k')
+    
+    return(basemap.pcolormesh(longitudes,latitudes,data,vmin=vmin,vmax=vmax, latlon=True, cmap=cmap, shading = 'nearest',alpha=alpha,linewidth=0.05))
+
+def scatter_basemapplot(ds,var,basemap,vmin,vmax,cmap=None,alpha=1):
+
+    longitudes = ds.longitude.data
+    latitudes = ds.latitude.data
+    x, y = basemap(longitudes, latitudes)
+    
+    data = ds[f'{var}'].data
+    # vmin = data.min()
+    # vmax=data.max()
+    
+    shapefile_path = '/data/notebooks/jupyterlab-biascorrlab/data/Antarctica_Shapefile/antarctica_shapefile'
+    basemap.readshapefile(shapefile_path, 'antarctica_shapefile',linewidth=0.1,antialiased=False,color='k')
+    
+    return(basemap.scatter(x, y, 10, marker='o', c=data, vmin=vmin,vmax=vmax, cmap=cmap,alpha=alpha, zorder=3))
+
 
     
 # from shapely.geometry import Point

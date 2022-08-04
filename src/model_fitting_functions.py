@@ -2,6 +2,7 @@ import timeit
 import numpyro
 import jax.numpy as jnp
 import jax.scipy.stats.gamma as jgamma
+from jax.scipy.special import expit
 from jax import random, vmap, jit
 from numpyro.distributions import constraints
 import numpyro.distributions as dist
@@ -11,8 +12,9 @@ import numpy as np
 from numpy import ndarray
 from tensorflow.keras.optimizers import Optimizer
 from gpflow.models import SGPR
+from tinygp import kernels, GaussianProcess,transforms
 from scipy.cluster.vq import kmeans2
-    
+
 class BernoulliGamma(numpyro.distributions.Distribution):
     """
     Creates a Bernoulli-Gamma distribution class to use with numpyro
@@ -44,6 +46,80 @@ class BernoulliGamma(numpyro.distributions.Distribution):
         log_gamma_sum = jnp.sum(jnp.where(value != 0, log_gamma, 0), axis=0)
 
         return log_bernoulli_sum+log_gamma_sum
+
+def base_model(jdata):
+    """
+    Bernoulli-Gamma model code for use with numpyro
+    Args:
+        jdata (jax device array): data in shape [days,months,sites]
+    """
+
+    p = numpyro.sample("p", dist.Uniform(0.01, 0.99))
+    alpha = numpyro.sample("alpha", dist.Gamma(0.001, 0.001))
+    beta = numpyro.sample("beta", dist.Gamma(0.001, 0.001))
+
+    numpyro.sample(
+        "obs",
+        BernoulliGamma([p, alpha, beta]),
+        obs=jdata,
+    )
+    
+def top_model(distance_matrix_values,jdata):
+    """
+    Gaussian Process model code for use with numpyro
+    Args:
+        distance_matrix_values (jax device array): matrix of distances between sites, shape [#sites,#sites]
+        jdata (jax device array): data in shape [#days,#months,#sites]
+    """
+    
+    #Hyper Params GP:
+    var_alpha = numpyro.sample("kernel_var_alpha", dist.LogNormal(0.1, 10.0))
+    noise_alpha = numpyro.sample("kernel_noise_alpha", dist.LogNormal(0.1, 10.0))
+    length_alpha = numpyro.sample("kernel_length_alpha", dist.LogNormal(0.1, 10.0))
+    
+    kern_alpha = gpkernel(distance_matrix_values, var_alpha, length_alpha, noise_alpha)
+    
+    alpha = numpyro.sample("alpha", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_alpha))
+    
+def full_model(distance_matrix_values,jdata):
+    """
+    Bernoulli-Gamma, Gaussian Process Hierarchical model code for use with numpyro
+    Args:
+        distance_matrix_values (jax device array): matrix of distances between sites, shape [#sites,#sites]
+        jdata (jax device array): data in shape [#days,#months,#sites]
+    """
+    
+    #Hyper Params GP:
+    var_alpha = numpyro.sample("kernel_var_alpha", dist.LogNormal(0.1, 10.0))
+    noise_alpha = numpyro.sample("kernel_noise_alpha", dist.LogNormal(0.1, 10.0))
+    length_alpha = numpyro.sample("kernel_length_alpha", dist.LogNormal(0.1, 10.0))
+    
+    var_beta = numpyro.sample("kernel_var_beta", dist.LogNormal(0.1, 10.0))
+    noise_beta = numpyro.sample("kernel_noise_beta", dist.LogNormal(0.1, 10.0))
+    length_beta = numpyro.sample("kernel_length_beta", dist.LogNormal(0.1, 10.0))
+    
+    var_p = numpyro.sample("kernel_var_p", dist.LogNormal(0.1, 10.0))
+    noise_p = numpyro.sample("kernel_noise_p", dist.LogNormal(0.1, 10.0))
+    length_p = numpyro.sample("kernel_length_p", dist.LogNormal(0.1, 10.0))
+    
+    kern_alpha = gpkernel(distance_matrix_values, var_alpha, length_alpha, noise_alpha)
+    kern_beta = gpkernel(distance_matrix_values, var_beta, length_beta, noise_beta)
+    kern_p = gpkernel(distance_matrix_values, var_p, length_p, noise_p)
+    
+    alpha = numpyro.sample("alpha", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_alpha))
+    beta = numpyro.sample("beta", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_beta))
+    p = numpyro.sample("p", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_p))
+    
+    # Number of Months and Sites
+    months = jdata.shape[1]
+    sites = jdata.shape[2]
+    
+    numpyro.sample(
+        "obs",
+        BernoulliGamma([p, alpha, beta]),
+        obs=jdata,
+    )
+
     
 def bg_model(jdata):
     """
@@ -67,11 +143,11 @@ def bg_model(jdata):
             alpha = numpyro.sample("alpha", dist.Gamma(0.001, 0.001))
             beta = numpyro.sample("beta",dist.LogNormal(a0+a1*alpha,betavar))
 
-    numpyro.sample(
-        "obs",
-        BernoulliGamma([p, alpha, beta]),
-        obs=jdata,
-    )
+            numpyro.sample(
+                "obs",
+                BernoulliGamma([p, alpha, beta]),
+                obs=jdata,
+            )
     
 def gpkernel(distance_matrix_values, var, length, noise, jitter=1.0e-6, include_noise=True):
     """
@@ -102,25 +178,41 @@ def bg_gp_model(distance_matrix_values,jdata):
     a0 = numpyro.sample("a0", dist.Uniform(-10, 10.0))
     a1 = numpyro.sample("a1", dist.Uniform(-10, 10.0))
     betavar = numpyro.sample("betavar", dist.InverseGamma(0.001, 0.001))
+    # alphavar = numpyro.sample("alphavar", dist.InverseGamma(0.001, 0.001))
     
     #Hyper Params GP:
-    var = numpyro.sample("kernel_var", dist.LogNormal(0.1, 10.0))
-    noise = numpyro.sample("kernel_noise", dist.LogNormal(0.1, 10.0))
-    length = numpyro.sample("kernel_length", dist.LogNormal(0.1, 10.0))
+    var_alpha = numpyro.sample("kernel_var_alpha", dist.LogNormal(0.1, 10.0))
+    noise_alpha = numpyro.sample("kernel_noise_alpha", dist.LogNormal(0.1, 10.0))
+    length_alpha = numpyro.sample("kernel_length_alpha", dist.LogNormal(0.1, 10.0))
+    var_p = numpyro.sample("kernel_var_p", dist.LogNormal(0.1, 10.0))
+    noise_p = numpyro.sample("kernel_noise_p", dist.LogNormal(0.1, 10.0))
+    length_p = numpyro.sample("kernel_length_p", dist.LogNormal(0.1, 10.0))
     
-    kern = gpkernel(distance_matrix_values, var, length, noise)
+    kern_alpha = gpkernel(distance_matrix_values, var_alpha, length_alpha, noise_alpha)
+    kern_p = gpkernel(distance_matrix_values, var_p, length_p, noise_p)
 
     # Number of Months and Sites
     months = jdata.shape[1]
     sites = jdata.shape[2]
     
     with numpyro.plate("Months", months, dim=-2) as k:
-        log_alpha = numpyro.sample("log_alpha", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern))
+        
+        log_alpha = numpyro.sample("log_alpha", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_alpha))
+        
+#         log_alpha = numpyro.sample("log_alpha", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_alpha))
         alpha = jnp.exp(log_alpha)
         alpha = alpha.reshape(months,sites)
-        with numpyro.plate("Sites", sites, dim=-1) as j:
-            p = numpyro.sample("p", dist.Uniform(0.01, 0.99))
-            
+        
+        # alpha = numpyro.sample("alpha",dist.LogNormal(log_alpha,alphavar))
+        # log_alpha = log_alpha.reshape(months,sites)
+        logit_p = numpyro.sample("logit_p", dist.MultivariateNormal(loc=jnp.zeros(distance_matrix_values.shape[0]), covariance_matrix=kern_p))
+        p = expit(logit_p) # dist.bernoulli(MNV)
+        p = p.reshape(months,sites) 
+        # with numpyro.plate("Sites", sites, dim=-1) as j:
+        #     p = numpyro.sample("p", dist.Uniform(0.01, 0.99))
+    
+    # alpha = numpyro.sample("alpha",dist.LogNormal(log_alpha,alphavar))
+    
     beta = numpyro.sample("beta",dist.LogNormal(a0+a1*alpha,betavar))
 
     numpyro.sample(
@@ -130,6 +222,36 @@ def bg_gp_model(distance_matrix_values,jdata):
     )
      
 def run_inference(model,rng_key,num_warmup,num_samples,data,distance_matrix=None):
+    """
+    Helper function for doing MCMC inference
+    Args:
+        model (python function): function that follows numpyros syntax
+        rng_key (np array): PRNGKey for reproducible results
+        num_warmup (int): Number of MCMC steps for warmup
+        num_samples (int): Number of MCMC samples to take of parameters after warmup
+        data (jax device array): data in shape [#days,#months,#sites]
+        distance_matrix_values(jax device array): matrix of distances between sites, shape [#sites,#sites]
+    Returns:
+        MCMC numpyro instance (class object): An MCMC class object with functions such as .get_samples() and .run()
+    """
+    starttime = timeit.default_timer()
+
+    kernel = NUTS(model)
+    mcmc = MCMC(
+        kernel,
+        num_warmup=num_warmup,
+        num_samples=num_samples,
+        num_chains=1,
+    )
+    if distance_matrix==None:
+        mcmc.run(rng_key, data)
+    else:
+        mcmc.run(rng_key, distance_matrix, data)
+    mcmc.print_summary()
+    print("Time Taken:", timeit.default_timer() - starttime)
+    return mcmc
+
+def run_inference_tinygp(model,rng_key,num_warmup,num_samples,data,X=None):
     """
     Helper function for doing MCMC inference
     Args:
@@ -151,13 +273,40 @@ def run_inference(model,rng_key,num_warmup,num_samples,data,distance_matrix=None
         num_samples=num_samples,
         num_chains=1,
     )
-    if distance_matrix==None:
-        mcmc.run(rng_key, data)
-    else:
-        mcmc.run(rng_key, distance_matrix, data)
+
+    mcmc.run(rng_key, X, data)
     mcmc.print_summary()
     print("Time Taken:", timeit.default_timer() - starttime)
-    return mcmc.get_samples()
+    return mcmc#.get_samples()
+
+def tinygp_model(x,jdata=None):
+    """
+   Gaussian Process model code for use with numpyro
+    Args:
+        distance_matrix_values (jax device array): matrix of distances between sites, shape [#sites,#sites]
+        jdata (jax device array): data in shape [#days,#months,#sites]
+    """
+
+    alpha = jdata[0]
+    p = jdata[1]
+
+    
+    alpha_kern_var = numpyro.sample("alpha_kern_var", dist.HalfNormal(1.0))
+    alpha_like_var = numpyro.sample("alpha_like_var", dist.HalfNormal(1.0))
+    alpha_lengthscale = numpyro.sample("alpha_lengthscale", dist.HalfNormal(1))
+    alpha_kernel = alpha_kern_var * kernels.Exp(alpha_lengthscale)
+    alpha_mean = numpyro.sample("alpha_mean", dist.Normal(0.0, 2.0))
+    alpha_gp = GaussianProcess(alpha_kernel, x, diag=alpha_like_var+1e-5, mean=alpha_mean)
+    numpyro.sample("alpha", alpha_gp.numpyro_dist(),obs=alpha)
+
+    p_kern_var = numpyro.sample("p_kern_var", dist.HalfNormal(1.0))
+    p_like_var = numpyro.sample("p_like_var", dist.HalfNormal(1.0))
+    p_lengthscale = numpyro.sample("p_lengthscale", dist.HalfNormal(1))
+    p_kernel = p_kern_var * kernels.Exp(p_lengthscale)
+    p_mean = numpyro.sample("p_mean", dist.Normal(0.0, 2.0))
+    p_gp = GaussianProcess(p_kernel, x, diag=p_like_var+1e-5, mean=p_mean)
+    numpyro.sample("p", p_gp.numpyro_dist(),obs=p)
+
         
 def train_gp(m, nits: int, opt: Optimizer, verbose: bool=False):
     """

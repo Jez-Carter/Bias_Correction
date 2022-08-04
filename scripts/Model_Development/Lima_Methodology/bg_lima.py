@@ -65,12 +65,3 @@ ds = ds.assign_coords(
 outfile_path = f"/data/notebooks/jupyterlab-biascorrlab/data/Lima2021/AP_Daily_Snowfall_044_BGFit.nc"
 ds.to_netcdf(outfile_path)
 
-# samples_array = np.array(list(samples.items()),dtype=object)
-# np.save(f'{folder_path}AP_BGLima_Snowfall_044_Sample.npy',samples_array)
-
-# alpha_mean_estimates = samples['alpha'].mean(axis=(0))
-# p_mean_estimates = samples['p'].mean(axis=(0))
-# df_estimates = df_sample[['grid_latitude','grid_longitude','latitude','longitude','month']].drop_duplicates()
-# df_estimates['alpha']=alpha_mean_estimates.reshape(-1)
-# df_estimates['p']=p_mean_estimates.reshape(-1)
-# df_estimates.to_csv(f'{folder_path}AP_BGLima_Snowfall_044_Mean_Estimates.csv',index=True)
