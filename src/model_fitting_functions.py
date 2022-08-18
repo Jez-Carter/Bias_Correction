@@ -328,4 +328,36 @@ def train_gp(m, nits: int, opt: Optimizer, verbose: bool=False):
             print(f"Step {i}: loss {current_loss}")
     return m, logfs
     
+def bg_tinygp_model(x,jdata=None):
+    # Hyper-Params: (These are used to describe the relationship between alpha and the scale parameter from the Bernoulli-Gamma dist.)
+    a0 = numpyro.sample("a0", dist.Uniform(-10, 10.0))
+    a1 = numpyro.sample("a1", dist.Uniform(-10, 10.0))
+    betavar = numpyro.sample("betavar", dist.InverseGamma(0.001, 0.001))
+    
+    alpha_kern_var = numpyro.sample("log_alpha_kern_var", dist.HalfNormal(1.0))
+    alpha_like_var = numpyro.sample("log_alpha_like_var", dist.HalfNormal(1.0))
+    alpha_lengthscale = numpyro.sample("log_alpha_lengthscale", dist.HalfNormal(1))
+    alpha_kernel = alpha_kern_var * kernels.Exp(alpha_lengthscale)
+    alpha_mean = numpyro.sample("log_alpha_mean", dist.Normal(0.0, 2.0))
+    alpha_gp = GaussianProcess(alpha_kernel, x, diag=alpha_like_var+1e-5, mean=alpha_mean)
+    # alpha = numpyro.sample("alpha", alpha_gp.numpyro_dist())
+    log_alpha = numpyro.sample("log_alpha", alpha_gp.numpyro_dist())
+    alpha = jnp.exp(log_alpha)
 
+    p_kern_var = numpyro.sample("logit_p_kern_var", dist.HalfNormal(1.0))
+    p_like_var = numpyro.sample("logit_p_like_var", dist.HalfNormal(1.0))
+    p_lengthscale = numpyro.sample("logit_p_lengthscale", dist.HalfNormal(1))
+    p_kernel = p_kern_var * kernels.Exp(p_lengthscale)
+    p_mean = numpyro.sample("logit_p_mean", dist.Normal(0.0, 2.0))
+    p_gp = GaussianProcess(p_kernel, x, diag=p_like_var+1e-5, mean=p_mean)
+    # p = numpyro.sample("p", p_gp.numpyro_dist())
+    logit_p = numpyro.sample("logit_p", p_gp.numpyro_dist())
+    p = expit(logit_p)
+    
+    beta = numpyro.sample("beta",dist.LogNormal(a0+a1*alpha,betavar))
+        
+    numpyro.sample(
+        "obs",
+        BernoulliGamma([p, alpha, beta]),
+        obs=jdata,
+    )

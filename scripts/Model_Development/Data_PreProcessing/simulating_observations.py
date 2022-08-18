@@ -1,43 +1,25 @@
 '''
 This script takes daily snowfall data from the climate model and samples to particular sites, which we treat as 'observations'.
-The 'observation' data is stored as CSV file that can be loaded directly into a pandas dataframe.
-The xarray python package is used to load the netCDF data and transform it into a dataframe.
+The 'observation' data is stored as NetCDF file that can be loaded directly into an xarray dataset.
 '''
 
 import xarray as xr
-from tqdm import tqdm
 import numpy as np
-import pandas as pd
-import sys
 
-base_path = '/data/notebooks/jupyterlab-biascorrlab/data/Lima2021/'
-lsm_path = 'http://192.171.173.134/thredds/fileServer/dsnefiles/Jez/MetUM_Data/CORDEX_044_Fixed/Antarctic_CORDEX_MetUM_0p44deg_lsm.nc'
+base_path = '/data/notebooks/jupyterlab-biascorrlab/data/'
+lsm_path = 'RawData/Antarctic_CORDEX_MetUM_0p44deg_lsm.nc'
 
 #loading land-sea mask
-ds_lsm = xr.open_dataset(f'{lsm_path}#mode=bytes')
-ds_lsm = ds_lsm.drop('rotated_latitude_longitude')
-da_lsm = ds_lsm.to_array()[0,40:70,5:40] # (grid_lat,grid_lon) #[40:70,5:40] selects Antarctic Peninsula
-df_lsm = da_lsm.to_dataframe(name='lsm').reset_index().drop(columns='variable')
+ds_lsm = xr.open_dataset(f'{base_path}{lsm_path}')
+da_lsm = ds_lsm['lsm'][40:70,5:40] # (grid_lat,grid_lon) #[40:70,5:40] selects Antarctic Peninsula
 
-#loading daily snowfall data
-ds = xr.open_dataset('/data/notebooks/jupyterlab-biascorrlab/data/AP_Daily_Snowfall_044.nc') # Note this netCDF data is already filtered to just the antarctic peninsula
-ds = ds.drop('rotated_latitude_longitude')
-ds = ds.drop_dims('bnds')
-ds = ds*10**5 # Note I found that for some reason the fitting procedure struggles with very small values of snowfall, so I multiply by 10^5
-df = ds.to_dataframe().reset_index()
+#loading daily snowfall data and adding land sea mask variable
+ds = xr.open_dataset(f'{base_path}ProcessedData/AP_Daily_Snowfall_044.nc') # Note this netCDF data is already filtered to just the antarctic peninsula
+ds = ds.assign(lsm=da_lsm)
 
-#merging to include land-sea-mask column
-df = df.merge(df_lsm)
-
-#including month and latlon combined columns
-time_values = df['time']
-month_values = np.array([i.month for i in time_values])
-df['month']=month_values
-df['lonlat']=df[['latitude', 'longitude']].apply(tuple, axis=1)
-
-#filtering so all sites have the same number of days of data
-min_days = df.groupby(['month','lonlat']).count().min()[0] #calculating the minimum days for any month and site
-df = df.groupby(['month','lonlat']).sample(min_days) # resampling so all months and sites have the same number of days
+#Stacking dataset dimensions so sites can be randomly selected
+ds_stacked = ds.stack(sites=['grid_latitude', 'grid_longitude'])
+ds_stacked = ds_stacked.reset_index('sites') # needed for saving to net_cdf at end as there's no support currently for saving multiindecies to netcdf
 
 ######################################
 #Randomly_Distributed_Observations_100
@@ -46,10 +28,11 @@ print('Randomly_Distributed_Observations_100')
 
 np.random.seed(0)
 sample_size = 100
-sample_indicies = np.random.choice(len(df['lonlat'].unique()),sample_size,replace=False)
-df_sample = df[df['lonlat'].isin(df['lonlat'].unique()[sample_indicies])]
-df_sample = df_sample.sort_values(['month','lonlat','time'])
-df_sample.to_csv(f'{base_path}Randomly_Distributed_Observations_100/AP_Daily_Snowfall_044_Sample.csv')
+sample_indicies = np.random.choice(len(ds_stacked.sites),sample_size,replace=False)
+ds_sample = ds_stacked.isel(sites=sample_indicies)
+
+outfile_path = f'{base_path}ProcessedData/AP_Daily_Snowfall_Randomly_Distributed_Observations_100.nc'
+ds_sample.to_netcdf(outfile_path)
 
 ######################################
 #Land_Only_Distributed_Observations_100
@@ -58,8 +41,10 @@ print('Land_Only_Distributed_Observations_100')
 
 np.random.seed(0)
 sample_size = 100
-df_land_only = df[df['lsm']==1]
-sample_indicies = np.random.choice(len(df_land_only['lonlat'].unique()),sample_size,replace=False)
-df_sample = df_land_only[df_land_only['lonlat'].isin(df_land_only['lonlat'].unique()[sample_indicies])]
-df_sample = df_sample.sort_values(['month','lonlat','time'])
-df_sample.to_csv(f'{base_path}Land_Only_Distributed_Observations_100/AP_Daily_Snowfall_044_Sample.csv')
+ds_stacked_filtered = ds_stacked.where(ds_stacked.lsm == 1,drop=True)
+sample_indicies = np.random.choice(len(ds_stacked_filtered.sites),sample_size,replace=False)
+
+ds_sample = ds_stacked_filtered.isel(sites=sample_indicies)
+
+outfile_path = f'{base_path}ProcessedData/AP_Daily_Snowfall_Land_Only_Distributed_Observations_100.nc'
+ds_sample.to_netcdf(outfile_path)
