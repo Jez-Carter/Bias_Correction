@@ -40,16 +40,54 @@ rng_key = random.PRNGKey(0)
 rng_key, rng_key_ = random.split(rng_key)
 mcmc = run_inference_tinygp(bg_tinygp_model, rng_key_, 1000, 2000, Y, X=X)
 
-bggp_idata = az.from_numpyro(
+idata = az.from_numpyro(
     mcmc,
-    coords={"sites": np.arange(0, 100, 1)},
-    dims={"alpha": ["sites"], "beta": ["sites"],"p": ["sites"]},
+    coords={"days": np.arange(0, 570, 1),"sites": np.arange(0, 100, 1)},
+    dims={"obs": ["days","sites"],"log_alpha": ["sites"], "beta": ["sites"],"logit_p": ["sites"]},
 )
 
-bggp_idata.posterior['alpha']=np.exp(bggp_idata.posterior['log_alpha'])
+parameters = list(idata.posterior.keys())
+for param in parameters:
+    if 'log_alpha' in param:
+        new_param = param.replace("log_alpha", "alpha")
+        idata.posterior[new_param]=np.exp(idata.posterior[param])
+    elif 'logit_p' in param:
+        new_param = param.replace("logit_p", "p")
+        data = expit(idata.posterior[param].data)
+        dimensions = list(idata.posterior[param].coords)
+        idata.posterior[new_param]=(dimensions,data)
+        
+# Reassigning coordinates to observed data
+idata.observed_data = idata.observed_data.assign_coords(
+    grid_latitude=("sites", ds["grid_latitude"].data),
+    grid_longitude=("sites", ds["grid_longitude"].data),
+    latitude=("sites", ds["latitude"].data),
+    longitude=("sites", ds["longitude"].data),
+    grid_latitude_standardised=(
+        "sites",
+        ds["grid_latitude_standardised"].data,
+    ),
+    grid_longitude_standardised=(
+        "sites",
+        ds["grid_longitude_standardised"].data,
+    ),
+)
 
-bggp_idata.posterior['p']=(('chain','draw','sites'),expit(bggp_idata.posterior['logit_p']))
+idata.posterior = idata.posterior.assign_coords(
+    grid_latitude=("sites", ds["grid_latitude"].data),
+    grid_longitude=("sites", ds["grid_longitude"].data),
+    latitude=("sites", ds["latitude"].data),
+    longitude=("sites", ds["longitude"].data),
+    grid_latitude_standardised=(
+        "sites",
+        ds["grid_latitude_standardised"].data,
+    ),
+    grid_longitude_standardised=(
+        "sites",
+        ds["grid_longitude_standardised"].data,
+    ),
+)
 
 # Saving output
 outfile_path = f'{base_path}ProcessedData/AP_Daily_Snowfall_Land_Only_Distributed_Observations_100_BGGP_Fit.nc'
-bggp_idata.to_netcdf(outfile_path)
+idata.to_netcdf(outfile_path)
