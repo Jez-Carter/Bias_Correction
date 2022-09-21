@@ -16,7 +16,7 @@ def standardise(data,refdata=None):
     if refdata is None:
         standardised_data = (data-data.mean())/data.std()
     else:
-        standardised_data = (data-data.mean())/data.std()
+        standardised_data = (data-refdata.mean())/refdata.std()
     return(standardised_data)
 
 def unstandardise(newdata,refdata):

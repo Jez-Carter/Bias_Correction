@@ -2,15 +2,18 @@
 This script takes daily 'observational' snowfall data and reformats the data such that it's in a form where the data can easily be queried and ingested into the numpyro model.
 """
 
+import sys
 import xarray as xr
 import numpy as np
 import jax.numpy as jnp
 
 from src.helper_functions import standardise
 
-base_path = '/data/notebooks/jupyterlab-biascorrlab/data/'
+path = sys.argv[1]
+outpath = sys.argv[2]
 
-ds_sample = xr.open_dataset(f'{base_path}ProcessedData/AP_Daily_Snowfall_Land_Only_Distributed_Observations_100.nc') 
+ds_sample = xr.open_dataset(path) 
+
 months = ds_sample.time.dt.month
 ds_sample = ds_sample.assign_coords(month=("time", months.data))
 ds_sample = ds_sample.sortby('month') #sorting the dataset to the order needed to assign the day coordinate
@@ -29,5 +32,4 @@ ds = ds.assign_coords(
     grid_longitude_standardised=("sites", grid_longitude_standardised.data)
 )
 
-outfile_path = f'{base_path}ProcessedData/AP_Daily_Snowfall_Land_Only_Distributed_Observations_100_Reformatted.nc'
-ds.to_netcdf(outfile_path)
+ds.to_netcdf(outpath)

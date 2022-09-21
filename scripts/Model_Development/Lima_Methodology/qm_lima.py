@@ -43,7 +43,7 @@ p_gp = build_gp(gp_idata,'p')
 
 #Conditioning based on observed data and on new coordinates
 _, alpha_gpcond = alpha_gp.condition(gp_idata.observed_data['alpha'].data, X)
-_, p_gpcond = alpha_gp.condition(gp_idata.observed_data['p'].data, X)
+_, p_gpcond = p_gp.condition(gp_idata.observed_data['p'].data, X)
 
 #Returning expectations of the a0, a1 and betavar parameters
 bg_idata_means = bg_idata.sel(months=1).posterior.mean(['chain','draw'])
