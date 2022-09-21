@@ -16,7 +16,7 @@ Tests for the code are included in: /tests. These remain very limited at the mom
 
 ***Next Steps***
 
-- At the moment estimates of the parameters are only dependent on our sudo observations. There is no trust or information gained from the climate model output itself. For sparse observations it makes sense to use the climate model output as well to make inference on for example the correlation length scale of our underlying process we're modelling. One option here is to assume a shared GP between the parameters $\Phi_Z$ and  $\Phi_Y$ (W) and that there is some additional GP (D) for $\Phi_Z$ that describes the bias to observations and we expect to have a longer length scale that W. For example, if the bias is constant over the whole domain, this is equivalent to saying the length scale for D is $\infty$.
+- At the moment estimates of the parameters are only dependent on our sudo observations. There is no trust or information gained from the climate model output itself. For sparse observations it makes sense to use the climate model output as well to make inference on for example the correlation length scale of our underlying process we're modelling. One option here is to assume a shared GP between the parameters $\Phi_Z$ and  $\Phi_Y$ (W) and that there is some additional GP (D) for $\Phi_Z$ that describes the bias to observations and that is expected to have a longer length scale than W. For example, if the bias is constant over the whole domain, this is equivalent to saying the length scale for D is $\infty$.
 
 $W = GP(0,\Sigma_W)$ 
 
@@ -43,4 +43,17 @@ In addition, Erick mentioned that sometimes the error term is excluded from the 
 - The examining results notebooks currently don't compare to what would happen if we fit a BG to all grid-cells of our climate model independently - it would be interesting to include this. 
 
 - We want to put an uncertainty band on our bias corrected time series at each location, which is not done in Lima - would be quite nice to plot.
- 
+
+***Code Adjustments/Errors that need fixing***
+
+- scripts/Model_Development/Examining_Results/Examining GP Output Lima.ipynb needs some further work and updates - bulleted list in notebook shows what updates to do
+- scripts/Model_Development/Examining_Results/Examining Bayesian Hierarchical Model Output.ipynb needs to be updated base on the 'Examining GP Output Lima.ipynb' notebook and it would be nice to have some direct comparison plots between the fully Bayesian and modular approaches - this might require first using link functions in the modular approach so that the GP is being fit to the logit_p, log_alpha etc and then lengthscales and uncertainties can be directly compared.
+- I need to watch the 'how to think in jax' video and in particular the jit compiling section to understand where in the code can be sped up
+- It would be nice if the scripts/Model_Development/Lima_Methodology/Running Scripts.ipynb ran from top to bottom and generated all results for the lima methodology - maybe I need to think about how I could get this to run on colab quickly and then copy across the results?
+- scripts/Model_Development/bg_tinygp.py needs adjusting such that it can take in an argument defining the input data path and the output path.
+- It might help to create a colab folder containing notebooks for running code in colab, these can initially be opened by going to the github repo, finding the notebook and then using the open in colab tab. (Alternatively I could create a colab initialise script that takes all the preamble needed in colab notebooks and can be called whenever using colab - e.g. changing directory and the base directory of the project perhaps? - pip installing various things etc.)
+- scripts/Model_Development/Lima_Methodology/bg_lima_all.py needs merging with bg_lima.py such that we just have one bg_lima.py script - this should be simple and just involves adjusting a couple of hard coded aspects like using 100 rather than 1050 sites etc. Note there is a Fitting BG to All Grid Cells.ipynb colab notebook I created, this could be a good test case for seeing if we can create a pre-amble script to use when using colab rather than having a seperate colab notebook saved somewhere.
+- Potentially adjust the way I do reshaping in scripts/Model_Development/Lima_Methodology/qm_lima.py and qm_proper_uncertainty_propagation.py to the way I do it in scripts/Model_Development/Examining_Results/Examining GP Output Lima.ipynb, which is a bit cleaner.
+- scripts/Model_Development/Lima_Methodology/qm_proper_uncertainty_propagation.py has been created and for which the code is still being developed in scripts/Code Development.ipynb, this notebook and script need some more developing and in addition the scripts/Model_Development/Examining_Results/QM Output Lima.ipynb needs updating and developed to nicely plot/capture uncertainty bands. 
+- Exploring getting %matplotlib widget working and using a new lab with the voila functionality.
+- General note that I need to check that uncertainty is being calculated in the proper way, where we take lots of realisations of the GPs parameters and predictions and then build up our posterior predictive from that.

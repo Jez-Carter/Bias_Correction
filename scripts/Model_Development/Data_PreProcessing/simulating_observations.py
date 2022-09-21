@@ -22,6 +22,14 @@ ds_stacked = ds.stack(sites=['grid_latitude', 'grid_longitude'])
 ds_stacked = ds_stacked.reset_index('sites') # needed for saving to net_cdf at end as there's no support currently for saving multiindecies to netcdf
 
 ######################################
+#All
+######################################
+print('All_Observations')
+
+outfile_path = f'{base_path}ProcessedData/AP_Daily_Snowfall_All_Observations.nc'
+ds_stacked.to_netcdf(outfile_path)
+
+######################################
 #Randomly_Distributed_Observations_100
 ######################################
 print('Randomly_Distributed_Observations_100')
