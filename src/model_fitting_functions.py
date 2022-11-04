@@ -15,6 +15,22 @@ from gpflow.models import SGPR
 from tinygp import kernels, GaussianProcess,transforms
 from scipy.cluster.vq import kmeans2
 
+def normal_model(jdata,mask):
+    """
+    Standard Normal model code for use with numpyro
+    Args:
+        jdata (jax device array): data in shape [days,months,sites]
+    """
+    # Number of Months and Sites
+    sites = jdata.shape[1]
+    
+    with numpyro.plate("Sites", sites, dim=-1) as j:        
+        loc = numpyro.sample("loc", dist.Uniform(-40, 0))
+        scale = numpyro.sample("scale", dist.Gamma(0.001, 0.001)) 
+        
+        masked_dist = dist.Normal(loc, scale).mask(mask)
+        numpyro.sample("obs", masked_dist, obs=jdata)
+
 class BernoulliGamma(numpyro.distributions.Distribution):
     """
     Creates a Bernoulli-Gamma distribution class to use with numpyro
@@ -221,7 +237,7 @@ def bg_gp_model(distance_matrix_values,jdata):
         obs=jdata,
     )
      
-def run_inference(model,rng_key,num_warmup,num_samples,data,distance_matrix=None):
+def run_inference(model,rng_key,num_warmup,num_samples,*args):#data,distance_matrix=None):
     """
     Helper function for doing MCMC inference
     Args:
@@ -243,10 +259,13 @@ def run_inference(model,rng_key,num_warmup,num_samples,data,distance_matrix=None
         num_samples=num_samples,
         num_chains=1,
     )
-    if distance_matrix==None:
-        mcmc.run(rng_key, data)
-    else:
-        mcmc.run(rng_key, distance_matrix, data)
+    
+    mcmc.run(rng_key, *args)
+
+    # if distance_matrix==None:
+    #     mcmc.run(rng_key, data)
+    # else:
+    #     mcmc.run(rng_key, distance_matrix, data)
     mcmc.print_summary()
     print("Time Taken:", timeit.default_timer() - starttime)
     return mcmc
@@ -361,3 +380,57 @@ def bg_tinygp_model(x,jdata=None):
         BernoulliGamma([p, alpha, beta]),
         obs=jdata,
     )
+    
+    
+# from numpyro.handlers import mask
+
+# def normal_model(jdata,series_lengths):
+#     """
+#     Standard Normal model code for use with numpyro
+#     Args:
+#         jdata (jax device array): data in shape [days,months,sites]
+#     """
+#     # Number of Months and Sites
+#     sites = jdata.shape[1]
+    
+#     max_length = jdata.shape[0]#series_lengths.max()
+#     series = jnp.arange(max_length).broadcast([sites,]).T
+    
+#     with numpyro.plate("Sites", sites, dim=-1) as j:        
+#         loc = numpyro.sample("loc", dist.Uniform(-40, 0))
+#         scale = numpyro.sample("scale", dist.Gamma(0.001, 0.001)) 
+
+#         with mask(mask=series < series_lengths):
+#             numpyro.sample(
+#                 "obs",
+#                 dist.Normal(loc, scale),
+#                 obs=jdata,
+#             )
+
+# ds = xr.open_dataset('/data/notebooks/jupyterlab-biascorrlab/data/ProcessedData/NST_Observations.nc')
+# ds = ds.transpose("Day", "Month", "Station_Lower")
+
+# da_temp = ds['Temperature()']
+# dat_temp_nans_sorted = np.sort(ds['Temperature()'])
+# j_data = jnp.array(dat_temp_nans_sorted.data)  # JAX array is needed for Numpyro
+# Y = j_data[:,0,:]
+# Y = np.expand_dims(Y, axis=1)
+# Y_test = Y[:,0,:10]
+
+# series_lengths = jnp.isnan(Y_test).sum(axis=0)
+
+# numpyro.enable_x64()
+
+# starttime = timeit.default_timer()
+
+# kernel = NUTS(normal_model)
+# mcmc = MCMC(
+#     kernel,
+#     num_warmup=1000,
+#     num_samples=2000,
+#     num_chains=1,
+# )
+
+# mcmc.run(rng_key, Y_test[:,:3], series_lengths)
+# mcmc.print_summary()
+# print("Time Taken:", timeit.default_timer() - starttime)
