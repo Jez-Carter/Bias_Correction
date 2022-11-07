@@ -1,7 +1,3 @@
-import os
-import matplotlib.pyplot as plt
-os.environ["PROJ_LIB"] = "C:\\Utilities\\Python\\Anaconda\\Library\\share"; #fixr
-from mpl_toolkits.basemap import Basemap
 import numpy as np
 from numpy import meshgrid
 import iris
@@ -31,8 +27,8 @@ def grid_coords_to_2d_latlon_coords(ds,ref_file):
     cs = cube.coord_system()
     lons,lats = unrotate_pole(rotated_grid_lons,rotated_grid_lats, cs.grid_north_pole_longitude, cs.grid_north_pole_latitude)
     ds_updated = ds.assign_coords(
-        latitude=(["grid_longitude","grid_latitude"], lats),
-        longitude=(["grid_longitude","grid_latitude"], lons),
+        latitude=(["grid_latitude","grid_longitude"], lats),
+        longitude=(["grid_latitude","grid_longitude"], lons),
     )
     return (ds_updated)
 
