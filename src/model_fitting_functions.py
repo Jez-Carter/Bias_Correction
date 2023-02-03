@@ -10,8 +10,8 @@ from numpyro.infer import MCMC, NUTS, HMC, BarkerMH
 from numpy import ndarray
 import numpy as np
 from numpy import ndarray
-from tensorflow.keras.optimizers import Optimizer
-from gpflow.models import SGPR
+# from tensorflow.keras.optimizers import Optimizer
+# from gpflow.models import SGPR
 from tinygp import kernels, GaussianProcess,transforms
 from scipy.cluster.vq import kmeans2
 
@@ -237,7 +237,7 @@ def bg_gp_model(distance_matrix_values,jdata):
         obs=jdata,
     )
      
-def run_inference(model,rng_key,num_warmup,num_samples,*args):#data,distance_matrix=None):
+def run_inference(model,rng_key,num_warmup,num_samples,*args,**kwargs):#data,distance_matrix=None):
     """
     Helper function for doing MCMC inference
     Args:
@@ -260,7 +260,7 @@ def run_inference(model,rng_key,num_warmup,num_samples,*args):#data,distance_mat
         num_chains=1,
     )
     
-    mcmc.run(rng_key, *args)
+    mcmc.run(rng_key, *args,**kwargs)
 
     # if distance_matrix==None:
     #     mcmc.run(rng_key, data)
@@ -326,26 +326,54 @@ def tinygp_model(x,jdata=None):
     p_gp = GaussianProcess(p_kernel, x, diag=p_like_var+1e-5, mean=p_mean)
     numpyro.sample("p", p_gp.numpyro_dist(),obs=p)
 
-        
-def train_gp(m, nits: int, opt: Optimizer, verbose: bool=False):
+def tinygp_model_nst(x,jdata=None):
     """
-    Helper function for training Gaussian Process in GPFlow using standard minimising algorithm
+   Gaussian Process model code for use with numpyro
     Args:
-        m (gpflow.models class): GPflow class that takes data, coords and kernel 
-        nits (int): Number of optimiser iterations
-        opt (tensorflow optimiser function): Minimising function e.g. adam
-    Returns:
-        m (gpflow.models class): GPFlow class with updated parameter estimates
-        logfs (?): ?Some sort of training loss?
+        distance_matrix_values (jax device array): matrix of distances between sites, shape [#sites,#sites]
+        jdata (jax device array): data in shape [#days,#months,#sites]
     """
-    logfs = []
-    for i in range(nits):
-        opt.minimize(m.training_loss, m.trainable_variables)
-        current_loss = -m.training_loss().numpy()
-        logfs.append(current_loss)
-        if verbose and i%50==0:
-            print(f"Step {i}: loss {current_loss}")
-    return m, logfs
+
+    loc = jdata[0]
+    scale = jdata[1]
+
+    
+    loc_kern_var = numpyro.sample("loc_kern_var", dist.HalfNormal(1.0))
+    loc_like_var = numpyro.sample("loc_like_var", dist.HalfNormal(1.0))
+    loc_lengthscale = numpyro.sample("loc_lengthscale", dist.HalfNormal(1))
+    loc_kernel = loc_kern_var * kernels.Exp(loc_lengthscale)
+    loc_mean = numpyro.sample("loc_mean", dist.Normal(0.0, 2.0))
+    loc_gp = GaussianProcess(loc_kernel, x, diag=loc_like_var+1e-5, mean=loc_mean)
+    numpyro.sample("loc", loc_gp.numpyro_dist(),obs=loc)
+
+    scale_kern_var = numpyro.sample("scale_kern_var", dist.HalfNormal(1.0))
+    scale_like_var = numpyro.sample("scale_like_var", dist.HalfNormal(1.0))
+    scale_lengthscale = numpyro.sample("scale_lengthscale", dist.HalfNormal(1))
+    scale_kernel = scale_kern_var * kernels.Exp(scale_lengthscale)
+    scale_mean = numpyro.sample("scale_mean", dist.Normal(0.0, 2.0))
+    scale_gp = GaussianProcess(scale_kernel, x, diag=scale_like_var+1e-5, mean=scale_mean)
+    numpyro.sample("scale", scale_gp.numpyro_dist(),obs=scale)
+
+        
+# def train_gp(m, nits: int, opt: Optimizer, verbose: bool=False):
+#     """
+#     Helper function for training Gaussian Process in GPFlow using standard minimising algorithm
+#     Args:
+#         m (gpflow.models class): GPflow class that takes data, coords and kernel 
+#         nits (int): Number of optimiser iterations
+#         opt (tensorflow optimiser function): Minimising function e.g. adam
+#     Returns:
+#         m (gpflow.models class): GPFlow class with updated parameter estimates
+#         logfs (?): ?Some sort of training loss?
+#     """
+#     logfs = []
+#     for i in range(nits):
+#         opt.minimize(m.training_loss, m.trainable_variables)
+#         current_loss = -m.training_loss().numpy()
+#         logfs.append(current_loss)
+#         if verbose and i%50==0:
+#             print(f"Step {i}: loss {current_loss}")
+#     return m, logfs
     
 def bg_tinygp_model(x,jdata=None):
     # Hyper-Params: (These are used to describe the relationship between alpha and the scale parameter from the Bernoulli-Gamma dist.)
@@ -381,7 +409,55 @@ def bg_tinygp_model(x,jdata=None):
         obs=jdata,
     )
     
-    
+def tinygp_example_model(x,jdata=None):
+    """
+   Gaussian Process model code for use with numpyro
+    Args:
+        distance_matrix_values (jax device array): matrix of distances between sites, shape [#sites,#sites]
+        jdata (jax device array): data in shape [#days,#months,#sites]
+    """
+
+    kern_var = numpyro.sample("kern_var", dist.Gamma(3.0,0.5))
+    # like_var = numpyro.sample("like_var", dist.HalfNormal(1.0))
+    lengthscale = numpyro.sample("lengthscale", dist.Gamma(3.0,0.5))
+    kernel = kern_var * kernels.ExpSquared(lengthscale)
+    mean = numpyro.sample("mean", dist.Normal(0.0, 2.0))
+    # gp = GaussianProcess(kernel, x, diag=like_var+1e-5, mean=mean)
+    gp = GaussianProcess(kernel, x, mean=mean)
+
+    truth = numpyro.sample("temperature", gp.numpyro_dist(),obs=jdata)
+    print(truth)
+
+def tinygp_2process_example_model(cx,ox=None,cdata=None,odata=None):
+    """
+   Example model where the climate data is generated from 2 GPs, one of which also generates the observations and one of which generates bias in the climate model.
+    Args:
+        cx (jax device array): array of coordinates for climate model, shape [#gridcells,dimcoords]
+        ox (jax device array): array of coordinates for observations, shape [#sites,dimcoords]
+        cdata (jax device array): array of data values for climate model, shape [#gridcells,]
+        odata (jax device array): array of data values for observations, shape [#sites,]
+    """
+
+    #GP that generates the bias
+    bkern_var = numpyro.sample("bkern_var", dist.Gamma(3.0,0.5))
+    blengthscale = numpyro.sample("blengthscale", dist.Gamma(3.0,0.5))
+    bkernel = bkern_var * kernels.ExpSquared(blengthscale)
+    bmean = numpyro.sample("bmean", dist.Normal(0.0, 2.0))
+    bgp = GaussianProcess(bkernel, cx, mean=bmean)
+    bias = numpyro.sample("bias_temperature", bgp.numpyro_dist()) 
+
+    #GP that generates the truth (& so the observations directly)
+    kern_var = numpyro.sample("kern_var", dist.Gamma(3.0,0.5))
+    lengthscale = numpyro.sample("lengthscale", dist.Gamma(3.0,0.5))
+    kernel = kern_var * kernels.ExpSquared(lengthscale)
+    mean = numpyro.sample("mean", dist.Normal(0.0, 2.0))
+    gp = GaussianProcess(kernel, ox, mean=mean)
+    obs = numpyro.sample("obs_temperature", gp.numpyro_dist(),obs=odata)
+
+    #Conditional GP for evaluating the likelihood of the climate data
+    gp_cond = gp.condition(odata, cx).gp
+    climatetruth = numpyro.sample("climatetruth_temperature", gp_cond.numpyro_dist(),obs=cdata-bias)
+
 # from numpyro.handlers import mask
 
 # def normal_model(jdata,series_lengths):

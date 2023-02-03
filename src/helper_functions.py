@@ -7,6 +7,9 @@ import jax
 jax.config.update("jax_enable_x64", True)
 from statsmodels.distributions.empirical_distribution import ECDF
 from scipy import stats
+import geopandas as gpd
+from shapely.geometry import Point
+import datetime
 
 def standardise(data,refdata=None):
     if refdata is None:
@@ -80,4 +83,30 @@ def quantile_mapping(prsn,ecdf,diff_p,p,alpha,beta):
     
     return(corrected_prsn)
 
+def create_mask(da,gdf,projection=None):
+    longitude = da.longitude
+    latitude = da.latitude
+    mask_shape = longitude.shape
+    mask = np.empty(mask_shape,dtype=bool)
 
+    if projection is not None:
+        gdf = gdf.to_crs(projection)
+
+    for i in range(mask_shape[0]):
+        for j in range(mask.shape[1]):
+            point = Point(longitude.data[i,j],latitude.data[i,j])
+            point_gdf = gpd.GeoDataFrame(crs='epsg:4326', geometry=[point])
+            if projection is not None:
+                point_gdf = point_gdf.reset_index().to_crs(projection)
+            if gdf.contains(point_gdf).values[0]:
+                mask[i,j]=True
+            else:
+                mask[i,j]=False
+    return(mask)
+
+def calculate_time(year,month,day):
+    if np.isnan(year):
+        calctime = np.nan
+    else:
+        calctime = datetime.datetime(year=int(year), month=int(month), day=int(day))
+    return(calctime)
