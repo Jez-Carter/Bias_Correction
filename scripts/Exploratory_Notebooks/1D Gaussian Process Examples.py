@@ -1,9 +1,6 @@
 # %%
 #Importing Packages
 import numpy as np
-import xarray as xr
-from tqdm import tqdm
-from scipy.stats import multivariate_normal
 from tinygp import kernels, GaussianProcess
 import jax
 from jax import random
@@ -31,6 +28,7 @@ Y = GP.sample(rng_key)
 
 #Bias
 GP2 = GaussianProcess(1 * kernels.ExpSquared(5),X,diag=1e-5,mean=-1.0)
+rng_key, rng_key_ = random.split(rng_key)
 Y2 = GP2.sample(rng_key)
 
 
@@ -62,23 +60,23 @@ plt.ylabel('temperature')
 plt.legend()
 
 # %%
-# mcmc_2process = run_inference(tinygp_2process_model, rng_key_, 1000, 2000, cx,ox=ox,cdata=cdata,odata=odata)
+mcmc_2process = run_inference(tinygp_2process_model, rng_key_, 1000, 2000, cx,ox=ox,cdata=cdata,odata=odata,noise=1e-5)
 
 # %%
-# mcmc_obs = run_inference(tinygp_model, rng_key_, 1000, 2000, ox,data=odata)
-# mcmc_climate = run_inference(tinygp_model, rng_key_, 1000, 2000, cx,data=cdata)
+mcmc_obs = run_inference(tinygp_model, rng_key_, 1000, 2000, ox,data=odata,noise=1e-5)
+mcmc_climate = run_inference(tinygp_model, rng_key_, 1000, 2000, cx,data=cdata,noise=1e-5)
 
 # %%
-# #Saving Output from MCMC
-# outfile_dir = '/home/jez/Bias_Correction/data/Examples_Output/'
+#Saving Output from MCMC
+outfile_dir = '/home/jez/Bias_Correction/data/Examples_Output/'
 
-# idata_2process = az.from_numpyro(mcmc_2process)
-# idata_obs = az.from_numpyro(mcmc_obs)
-# idata_climate = az.from_numpyro(mcmc_climate)
+idata_2process = az.from_numpyro(mcmc_2process)
+idata_obs = az.from_numpyro(mcmc_obs)
+idata_climate = az.from_numpyro(mcmc_climate)
 
-# idata_2process.to_netcdf(f'{outfile_dir}idata_2process.nc')
-# idata_obs.to_netcdf(f'{outfile_dir}idata_obs.nc')
-# idata_climate.to_netcdf(f'{outfile_dir}idata_climate.nc')
+idata_2process.to_netcdf(f'{outfile_dir}idata_2process.nc')
+idata_obs.to_netcdf(f'{outfile_dir}idata_obs.nc')
+idata_climate.to_netcdf(f'{outfile_dir}idata_climate.nc')
 
 # %%
 #Loading Output from MCMC
@@ -176,3 +174,4 @@ plt.fill_between(nx,sp_bias_pred_mean+sp_bias_pred_std,sp_bias_pred_mean-sp_bias
 plt.xlabel('time')
 plt.ylabel('temperature')
 plt.legend()
+

@@ -2,14 +2,16 @@ from tqdm import tqdm
 import numpy as np
 import numpyro
 import numpyro.distributions as dist
+import jax.numpy as jnp
 from tinygp import kernels, GaussianProcess
 from scipy.stats import multivariate_normal
+import matplotlib.pyplot as plt
 
 from jax import random
 rng_key = random.PRNGKey(0)
 rng_key, rng_key_ = random.split(rng_key)
 
-def tinygp_model(x,data=None):
+def tinygp_model(x,data=None,noise=None):
 	"""
 	Example model where the data is generated from a GP.
 	Args:x (jax device array): array of coordinates for data, shape [#points,dimcoords]
@@ -19,10 +21,17 @@ def tinygp_model(x,data=None):
 	lengthscale = numpyro.sample("lengthscale", dist.Gamma(3.0,0.5))
 	kernel = kern_var * kernels.ExpSquared(lengthscale)
 	mean = numpyro.sample("mean", dist.Normal(0.0, 2.0))
-	gp = GaussianProcess(kernel, x, diag=1e-5, mean=mean)
+	gp = GaussianProcess(kernel, x, diag=noise, mean=mean)
 	numpyro.sample("data", gp.numpyro_dist(),obs=data)
 
-def tinygp_2process_model(cx,ox=None,cdata=None,odata=None):
+class Noise(kernels.Kernel):
+    def __init__(self, noise):
+        self.noise = noise
+
+    def evaluate(self, X1, X2):
+        return(jnp.where((X1==X2).all(),self.noise,0))
+
+def tinygp_2process_model(cx,ox=None,cdata=None,odata=None,noise=None):
     """
    Example model where the climate data is generated from 2 GPs, one of which also generates the observations and one of which generates bias in the climate model.
     Args:
@@ -35,18 +44,18 @@ def tinygp_2process_model(cx,ox=None,cdata=None,odata=None):
     #GP that generates the truth (& so the climateervations directly)
     kern_var = numpyro.sample("kern_var", dist.Gamma(3.0,0.5))
     lengthscale = numpyro.sample("lengthscale", dist.Gamma(3.0,0.5))
-    kernel = kern_var * kernels.ExpSquared(lengthscale)
+    kernel = kern_var * kernels.ExpSquared(lengthscale) + Noise(noise)
     mean = numpyro.sample("mean", dist.Normal(0.0, 2.0))
     gp = GaussianProcess(kernel, ox, diag=1e-5, mean=mean)
     numpyro.sample("obs_temperature", gp.numpyro_dist(),obs=odata)
 
     bkern_var = numpyro.sample("bkern_var", dist.Gamma(3.0,0.5))
     blengthscale = numpyro.sample("blengthscale", dist.Gamma(3.0,0.5))
-    bkernel = bkern_var * kernels.ExpSquared(blengthscale)
+    bkernel = bkern_var * kernels.ExpSquared(blengthscale) + Noise(noise)
     bmean = numpyro.sample("bmean", dist.Normal(0.0, 2.0))
 
     ckernel = kernel+bkernel
-    cgp = GaussianProcess(ckernel, cx, diag=1e-5, mean=mean+bmean)
+    cgp = GaussianProcess(ckernel, cx, mean=mean+bmean)
     numpyro.sample("climate_temperature", cgp.numpyro_dist(),obs=cdata)
 
 def diagonal_noise(square_matrix,noise):
@@ -54,8 +63,8 @@ def diagonal_noise(square_matrix,noise):
 
 def truth_posterior_predictive(nx,ox,cx,odata,cdata,omean,bmean,kernelo,kernelb):
     y2 = np.hstack([odata,cdata]) 
-    u1 = np.full(nx.shape, omean)
-    u2 = np.hstack([np.full(ox.shape, omean),np.full(cx.shape, omean+bmean)])
+    u1 = np.full(nx.shape[0], omean)
+    u2 = np.hstack([np.full(ox.shape[0], omean),np.full(cx.shape[0], omean+bmean)])
     k11 = kernelo(nx,nx)
     k11 = k11+diagonal_noise(k11,1e-5)
     k12 = np.hstack([kernelo(nx,ox),kernelo(nx,cx)])
@@ -78,8 +87,8 @@ def truth_posterior_predictive(nx,ox,cx,odata,cdata,omean,bmean,kernelo,kernelb)
 
 def bias_posterior_predictive(nx,ox,cx,odata,cdata,omean,bmean,kernelo,kernelb):
     y2 = np.hstack([odata,cdata]) 
-    u1 = np.full(nx.shape, bmean)
-    u2 = np.hstack([np.full(ox.shape, omean),np.full(cx.shape, omean+bmean)])
+    u1 = np.full(nx.shape[0], bmean)
+    u2 = np.hstack([np.full(ox.shape[0], omean),np.full(cx.shape[0], omean+bmean)])
     k11 = kernelb(nx,nx)
     k11 = k11+diagonal_noise(k11,1e-5)
     k12 = np.hstack([np.full((len(nx),len(ox)),0),kernelb(nx,cx)])
@@ -136,3 +145,16 @@ def singleprocess_posterior_predictive_realisations(nx,x,idata,num_parameter_rea
         realisations = gp_cond.sample(rng_key,(num_posterior_pred_realisations,))
         realisations_list.append(realisations)
     return(np.array(realisations_list))
+
+def plot_underlying_data(X,Y,Y2,ox,odata,cx,cdata,fs):
+    plt.figure(figsize=fs)
+    plt.plot(X,Y,label='Truth',alpha=0.6)
+    plt.plot(X,Y2,label='Bias',alpha=0.6)
+    plt.plot(X,Y+Y2,label='Bias+Truth',alpha=0.6)
+
+    plt.scatter(ox,odata,label='Observations',alpha=0.8)
+    plt.scatter(cx,cdata,color='g',label='Climate data',alpha=0.8)
+
+    plt.xlabel('time')
+    plt.ylabel('temperature')
+    plt.legend()
