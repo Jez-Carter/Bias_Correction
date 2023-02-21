@@ -37,12 +37,16 @@ mask[slice(int(len(X)/3),int(len(X)*2/3))]=False
 # %%
 
 Y = GP.sample(rng_key)
+rng_key, rng_key_ = random.split(rng_key)
 Y2 = GP2.sample(rng_key)
+rng_key, rng_key_ = random.split(rng_key)
 Y3 = GP3.sample(rng_key)
 
 cx = X[::10]  
 
 # %%
+# plt.plot(X,Y,label='Y')
+# plt.plot(X,Y2,label='Y2')
 plt.plot(X,Y3,label='Y3')
 plt.plot(X,Y+Y2,label='Y+Y2')
 plt.legend()
@@ -104,3 +108,7 @@ az.summary(idata_test,hdi_prob=0.95)
 
 
 # %%
+bdata = (Y2)[::10] 
+mcmc_2process = run_inference(tinygp_2process_model, rng_key_, 1000, 2000, bx,cdata=bdata)
+idata_test = az.from_numpyro(mcmc_2process)
+az.summary(idata_test,hdi_prob=0.95)
