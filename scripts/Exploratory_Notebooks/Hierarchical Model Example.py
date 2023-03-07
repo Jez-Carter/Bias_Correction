@@ -10,7 +10,7 @@ import numpyro.distributions as dist
 import matplotlib.pyplot as plt
 import arviz as az
 from src.model_fitting_functions import run_inference
-from src.examples_functions import hierarchical_model,truth_posterior_predictive,bias_posterior_predictive
+from src.examples_functions import create_levels,hierarchical_model,truth_posterior_predictive,bias_posterior_predictive
 from src.examples_functions import posterior_predictive_realisations_hierarchical_mean, posterior_predictive_realisations_hierarchical_var
 
 plt.rcParams['lines.markersize'] = 3
@@ -97,24 +97,40 @@ da_climate_stacked = da_climate.stack(X=('X1', 'X2'))
 da_obs.isnull().sum()
 
 # %%
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+fig, axs = plt.subplots(3, 3, figsize=(15, 12))
 plots = []
-variables = ['MEAN_T','MEAN_B','MEAN_C','VAR_T','VAR_B','VAR_C']
+variables = ['MEAN_T','MEAN_B','MEAN_C','VAR_T','VAR_B','VAR_C','LOGVAR_T','LOGVAR_B','LOGVAR_C']
+mean_levels = create_levels(ds[['MEAN_T','MEAN_B','MEAN_C']],0.25,0,center=True)
+var_levels = create_levels(ds[['VAR_T','VAR_B','VAR_C']],0.25,0)
+logvar_levels = create_levels(ds[['LOGVAR_T','LOGVAR_B','LOGVAR_C']],0.25,0,center=True)
 
-for i,var in zip(range(1, 7), variables):
-    plt.subplot(2, 3, i)
+for i in np.arange(0,3,1):
+    plt.subplot(3, 3, i+1)
     plots.append(
-        ds[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds[f'{variables[i]}'].plot.contourf(x='X1',y='X2',levels=mean_levels)
     )
-    plt.title(var)
+    plt.title(variables[i])
 
-for i,var,da in zip([0,2],['T','C'],[da_obs,da_climate]):
-    ax1 = axs.flatten()[i]
-    ax2 = axs.flatten()[i+3]
-    da = da.isel(D=0)
-    da = da.where(da.isnull(),1)
-    for ax in [ax1,ax2]:
-        da.to_dataset().plot.scatter(x='X1',y='X2',hue=f'{var}',s=30, facecolors='none', edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
+for i in np.arange(3,6,1):
+    plt.subplot(3, 3, i+1)
+    plots.append(
+        ds[f'{variables[i]}'].plot.contourf(x='X1',y='X2',levels=var_levels)
+    )
+    plt.title(variables[i])
+
+for i in np.arange(6,9,1):
+    plt.subplot(3, 3, i+1)
+    plots.append(
+        ds[f'{variables[i]}'].plot.contourf(x='X1',y='X2',levels=logvar_levels)
+    )
+    plt.title(variables[i])
+
+axs[0,0].scatter(da_obs_stacked.dropna('X').X1, da_obs_stacked.dropna('X').X2, s=30, marker='x', c='k')
+axs[1,0].scatter(da_obs_stacked.dropna('X').X1, da_obs_stacked.dropna('X').X2, s=30, marker='x', c='w')
+axs[2,0].scatter(da_obs_stacked.dropna('X').X1, da_obs_stacked.dropna('X').X2, s=30, marker='x', c='k')
+axs[0,2].scatter(da_climate_stacked.X1, da_climate_stacked.X2, s=30, marker='+', c='k')
+axs[1,2].scatter(da_climate_stacked.X1, da_climate_stacked.X2, s=30, marker='+', c='w')
+axs[2,2].scatter(da_climate_stacked.X1, da_climate_stacked.X2, s=30, marker='+', c='k')
 
 plt.tight_layout()
 
@@ -123,6 +139,9 @@ ox = np.array(list(map(np.array, da_obs_stacked.dropna('X').X.data)))
 cx = np.array(list(map(np.array, da_climate_stacked.X.data)))
 odata = da_obs_stacked.dropna('X').data
 cdata = da_climate_stacked.data
+
+# %%
+print(cdata.shape,odata.shape,cx.shape,ox.shape)
 
 # %%
 mcmc_hierarchical = run_inference(hierarchical_model, rng_key_, 1000, 2000, cx,cdata=cdata,ox=ox,odata=odata,noise=1e-5)
@@ -178,120 +197,189 @@ ds_predictions_stacked["lvb_std"]=(['X'],  bias_realisations_logvar.std(axis=(0,
 ds_predictions = ds_predictions_stacked.unstack()
 
 # %%
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+fig, axs = plt.subplots(3, 3, figsize=(15, 12))
 plots = []
-variables = ['MEAN_T','VAR_T']
-titles = ['Mean Truth','Variance Truth']
-pred_variables = ['mt_mean','mt_std','vt_mean','vt_std']
-pred_titles = ['Mean Pred. - Mean Truth','Stddev Pred. - Mean Truth','Mean Pred. - Var Truth','Stddev Pred. - Var Truth']
+variables = ['MEAN_T','VAR_T','LOGVAR_T']
+titles = ['Mean Truth','Variance Truth','Log(Variance) Truth']
+pred_variables = ['mt_mean','mt_std','vt_mean','vt_std','lvt_mean','lvt_std']
+pred_titles = ['Mean Pred. - Mean Truth','Stddev Pred. - Mean Truth','Mean Pred. - Var Truth','Stddev Pred. - Var Truth','Mean Pred. - LogVar Truth','Stddev Pred. - LogVar Truth']
 
-for i,var,title in zip([1,4], variables, titles):
-    plt.subplot(2, 3, i)
-    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=50))#,ax=axs.flatten()[0]))
+mt_levels = create_levels(ds[['MEAN_T']],0.25,0,center=True)
+vt_levels = create_levels(ds[['VAR_T']],0.25,0,center=True)
+lvt_truth_levels = create_levels(ds[['LOGVAR_T']],0.25,0,center=True)
+uncertainty_mt_levels = create_levels(ds_predictions[['mt_std']],0.1,1)
+uncertainty_vt_levels = create_levels(ds_predictions[['vt_std']],0.1,1)
+uncertainty_lvt_levels = create_levels(ds_predictions[['lvt_std']],0.1,1)
+
+mean_levels = [mt_levels,vt_levels,lvt_truth_levels]
+uncertainty_levels = [uncertainty_mt_levels,uncertainty_vt_levels,uncertainty_lvt_levels]
+
+for i,var,title,level in zip([1,4,7], variables, titles,mean_levels):
+    plt.subplot(3, 3, i)
+    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=level))#,ax=axs.flatten()[0]))
     plt.title(title)
 
-for i,var,title in zip([2,3,5,6], pred_variables, pred_titles):
-    plt.subplot(2, 3, i)
+for i,j,level in zip([2,5,8], [0,2,4] ,mean_levels):
+    plt.subplot(3, 3, i)
+    var = pred_variables[j]
+    title = pred_titles[j]
     plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=level)
     )
     plt.title(title)
 
-da = da_obs.isel(D=0)
-da = da.where(da.isnull(),1)
-for i in [0,1,2,3,4,5]:
-    ax = axs.flatten()[i]
-    da.to_dataset().plot.scatter(x='X1',y='X2',hue='T',s=30, facecolors='none', edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
+for i,j,level in zip([3,6,9], [1,3,5], uncertainty_levels):
+    plt.subplot(3, 3, i)
+    var = pred_variables[j]
+    title = pred_titles[j]
+    plots.append(
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=level)
+    )
+    plt.title(title)
 
 plt.tight_layout()
-
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
 
 # %%
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
+fig, axs = plt.subplots(3, 3, figsize=(15, 12))
 plots = []
-variables = ['MEAN_B','VAR_B']
-titles = ['Mean Bias','Variance Bias']
-pred_variables = ['mb_mean','mb_std','vb_mean','vb_std']
-pred_titles = ['Mean Pred. - Mean Bias','Stddev Pred. - Mean Bias','Mean Pred. - Var Bias','Stddev Pred. - Var Bias']
+variables = ['MEAN_B','VAR_B','LOGVAR_B']
+titles = ['Mean Bias','Variance Bias','Log(Variance) Bias']
+pred_variables = ['mb_mean','mb_std','vb_mean','vb_std','lvb_mean','lvb_std']
+pred_titles = ['Mean Pred. - Mean Bias','Stddev Pred. - Mean Bias','Mean Pred. - Var Bias','Stddev Pred. - Var Bias','Mean Pred. - LogVar Bias','Stddev Pred. - LogVar Bias']
 
-for i,var,title in zip([1,4], variables, titles):
-    plt.subplot(2, 3, i)
-    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=50))#,ax=axs.flatten()[0]))
+mb_levels = create_levels(ds[['MEAN_B']],0.25,0,center=True)
+vb_levels = create_levels(ds[['VAR_B']],0.25,0,center=True)
+lvb_truth_levels = create_levels(ds[['LOGVAR_B']],0.25,0,center=True)
+uncertainty_mb_levels = create_levels(ds_predictions[['mb_std']],0.1,1)
+uncertainty_vb_levels = create_levels(ds_predictions[['vb_std']],0.1,1)
+uncertainty_lvb_levels = create_levels(ds_predictions[['lvb_std']],0.1,1)
+
+mean_levels = [mb_levels,vb_levels,lvb_truth_levels]
+uncertainty_levels = [uncertainty_mb_levels,uncertainty_vb_levels,uncertainty_lvb_levels]
+
+for i,var,title,level in zip([1,4,7], variables, titles,mean_levels):
+    plt.subplot(3, 3, i)
+    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=level))#,ax=axs.flatten()[0]))
     plt.title(title)
 
-for i,var,title in zip([2,3,5,6], pred_variables, pred_titles):
-    plt.subplot(2, 3, i)
+for i,j,level in zip([2,5,8], [0,2,4] ,mean_levels):
+    plt.subplot(3, 3, i)
+    var = pred_variables[j]
+    title = pred_titles[j]
     plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=level)
     )
     plt.title(title)
 
-da = da_obs.isel(D=0)
-da = da.where(da.isnull(),1)
-for i in [0,1,2,3,4,5]:
-    ax = axs.flatten()[i]
-    da.to_dataset().plot.scatter(x='X1',y='X2',hue='T',s=30, facecolors='none', edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
+for i,j,level in zip([3,6,9], [1,3,5], uncertainty_levels):
+    plt.subplot(3, 3, i)
+    var = pred_variables[j]
+    title = pred_titles[j]
+    plots.append(
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=level)
+    )
+    plt.title(title)
 
 plt.tight_layout()
-
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
 
 # %%
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
-plots = []
-variables = ['MEAN_T','LOGVAR_T']
-titles = ['Mean Truth','Log Variance Truth']
-pred_variables = ['mt_mean','mt_std','lvt_mean','lvt_std']
-pred_titles = ['Mean Pred. - Mean Truth','Stddev Pred. - Mean Truth','Mean Pred. - Log Var Truth','Stddev Pred. - Log Var Truth']
+val = 52
+cdc = 'tab:orange' #climate_data_colour
+odc = 'tab:blue' #observation_data_colour
+bdc = 'tab:green'#bias_data_colour
+tpdc = 'tab:purple'#truth_prediction_data_colour
+bpdc = 'tab:olive'#bias_prediction_data_colour
 
-for i,var,title in zip([1,4], variables, titles):
-    plt.subplot(2, 3, i)
-    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=50))#,ax=axs.flatten()[0]))
-    plt.title(title)
+fig, ax = plt.subplots(1, 1, figsize=(8, 4))
 
-for i,var,title in zip([2,3,5,6], pred_variables, pred_titles):
-    plt.subplot(2, 3, i)
-    plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
-    )
-    plt.title(title)
+da_obs_slice=da_obs.sel(X2=val)
+da_climate_slice=da_climate.sel(X2=val,method="nearest")
+ax.scatter(da_obs_slice.X1, da_obs_slice.mean('D').data, s=30, marker='x',c=odc,label = f'MeanTruth Observations X={da_obs_slice.X2.data}')
+ax.scatter(da_climate_slice.X1, da_climate_slice.mean('D').data, s=30, marker='+',c=cdc,label = f'MeanClimate Output X={da_climate_slice.X2.data}')
 
-da = da_obs.isel(D=0)
-da = da.where(da.isnull(),1)
-for i in [0,1,2,3,4,5]:
-    ax = axs.flatten()[i]
-    da.to_dataset().plot.scatter(x='X1',y='X2',hue='T',s=30, facecolors='none', edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
+ds_slice = ds.sel(X2=val)
+ds_slice['MEAN_T'].plot(label = f'Underlying MeanTruth X={val}',c=odc)
+ds_slice['MEAN_B'].plot(label = f'Underlying MeanBias X={val}',c=bdc)
+ds_slice['MEAN_C'].plot(label = f'Underlying MeanClimate X={val}',c=cdc)
 
+ds_predictions_slice = ds_predictions.sel(X2=val)
+mean_truth_mean_pred = ds_predictions_slice['mt_mean'].data
+mean_truth_std_pred = ds_predictions_slice['mt_std'].data
+mean_bias_mean_pred = ds_predictions_slice['mb_mean'].data
+mean_bias_std_pred = ds_predictions_slice['mb_std'].data
+
+ax.plot(ds_predictions_slice.X1, mean_truth_mean_pred, c=tpdc,label = f'MeanTruth Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,mean_truth_mean_pred+mean_truth_std_pred,mean_truth_mean_pred-mean_truth_std_pred,label=f'MeanTruth StdDev Pred X={val}',color=tpdc,alpha=0.3)
+ax.plot(ds_predictions_slice.X1, mean_bias_mean_pred, c=bpdc,label = f'MeanBias Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,mean_bias_mean_pred+mean_bias_std_pred,mean_bias_mean_pred-mean_bias_std_pred,label=f'MeanBias StdDev Pred X={val}',color=bpdc,alpha=0.3)
+
+plt.legend()
 plt.tight_layout()
 
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
 # %%
-fig, axs = plt.subplots(2, 3, figsize=(15, 8))
-plots = []
-variables = ['MEAN_B','LOGVAR_B']
-titles = ['Mean Bias','Log Variance Bias']
-pred_variables = ['mb_mean','mb_std','lvb_mean','lvb_std']
-pred_titles = ['Mean Pred. - Mean Bias','Stddev Pred. - Mean Bias','Mean Pred. - Log Var Bias','Stddev Pred. - Log Var Bias']
+val = 52
+cdc = 'tab:orange' #climate_data_colour
+odc = 'tab:blue' #observation_data_colour
+bdc = 'tab:green'#bias_data_colour
+tpdc = 'tab:purple'#truth_prediction_data_colour
+bpdc = 'tab:olive'#bias_prediction_data_colour
 
-for i,var,title in zip([1,4], variables, titles):
-    plt.subplot(2, 3, i)
-    plots.append(ds[var].plot.contourf(x='X1',y='X2',levels=50))#,ax=axs.flatten()[0]))
-    plt.title(title)
+fig, ax = plt.subplots(1, 1, figsize=(8, 4))
 
-for i,var,title in zip([2,3,5,6], pred_variables, pred_titles):
-    plt.subplot(2, 3, i)
-    plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
-    )
-    plt.title(title)
+da_obs_slice=da_obs.sel(X2=val)
+da_climate_slice=da_climate.sel(X2=val,method="nearest")
+ax.scatter(da_obs_slice.X1, da_obs_slice.var('D').data, s=30, marker='x',c=odc,label = f'VarTruth Observations X={da_obs_slice.X2.data}')
+ax.scatter(da_climate_slice.X1, da_climate_slice.var('D').data, s=30, marker='+',c=cdc,label = f'VarClimate Output X={da_climate_slice.X2.data}')
 
-da = da_obs.isel(D=0)
-da = da.where(da.isnull(),1)
-for i in [0,1,2,3,4,5]:
-    ax = axs.flatten()[i]
-    da.to_dataset().plot.scatter(x='X1',y='X2',hue='T',s=30, facecolors='none', edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
+ds_slice = ds.sel(X2=val)
+ds_slice['VAR_T'].plot(label = f'Underlying VarTruth X={val}',c=odc)
+ds_slice['VAR_B'].plot(label = f'Underlying VarBias X={val}',c=bdc)
+ds_slice['VAR_C'].plot(label = f'Underlying VarClimate X={val}',c=cdc)
 
+ds_predictions_slice = ds_predictions.sel(X2=val)
+vartruth_mean_pred = ds_predictions_slice['vt_mean'].data
+vartruth_std_pred = ds_predictions_slice['vt_std'].data
+varbias_mean_pred = ds_predictions_slice['vb_mean'].data
+varbias_std_pred = ds_predictions_slice['vb_std'].data
+
+ax.plot(ds_predictions_slice.X1, vartruth_mean_pred, c=tpdc,label = f'VarTruth Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,vartruth_mean_pred+vartruth_std_pred,vartruth_mean_pred-vartruth_std_pred,label=f'VarTruth StdDev Pred X={val}',color=tpdc,alpha=0.3)
+ax.plot(ds_predictions_slice.X1, varbias_mean_pred, c=bpdc,label = f'VarBias Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,varbias_mean_pred+varbias_std_pred,varbias_mean_pred-varbias_std_pred,label=f'VarBias StdDev Pred X={val}',color=bpdc,alpha=0.3)
+
+plt.legend()
 plt.tight_layout()
 
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
+# %%
+val = 18
+cdc = 'tab:orange' #climate_data_colour
+odc = 'tab:blue' #observation_data_colour
+bdc = 'tab:green'#bias_data_colour
+tpdc = 'tab:purple'#truth_prediction_data_colour
+bpdc = 'tab:olive'#bias_prediction_data_colour
+
+fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+
+da_obs_slice=da_obs.sel(X2=val,method="nearest")
+da_climate_slice=da_climate.sel(X2=val,method="nearest")
+ax.scatter(da_obs_slice.X1, da_obs_slice.var('D').data, s=30, marker='x',c=odc,label = f'VarTruth Observations X={da_obs_slice.X2.data}')
+ax.scatter(da_climate_slice.X1, da_climate_slice.var('D').data, s=30, marker='+',c=cdc,label = f'VarClimate Output X={da_climate_slice.X2.data}')
+
+ds_slice = ds.sel(X2=val,method="nearest")
+ds_slice['VAR_T'].plot(label = f'Underlying VarTruth X={val}',c=odc)
+ds_slice['VAR_B'].plot(label = f'Underlying VarBias X={val}',c=bdc)
+ds_slice['VAR_C'].plot(label = f'Underlying VarClimate X={val}',c=cdc)
+
+ds_predictions_slice = ds_predictions.sel(X2=val,method="nearest")
+vartruth_mean_pred = ds_predictions_slice['vt_mean'].data
+vartruth_std_pred = ds_predictions_slice['vt_std'].data
+varbias_mean_pred = ds_predictions_slice['vb_mean'].data
+varbias_std_pred = ds_predictions_slice['vb_std'].data
+
+ax.plot(ds_predictions_slice.X1, vartruth_mean_pred, c=tpdc,label = f'VarTruth Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,vartruth_mean_pred+vartruth_std_pred,vartruth_mean_pred-vartruth_std_pred,label=f'VarTruth StdDev Pred X={val}',color=tpdc,alpha=0.3)
+ax.plot(ds_predictions_slice.X1, varbias_mean_pred, c=bpdc,label = f'VarBias Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,varbias_mean_pred+varbias_std_pred,varbias_mean_pred-varbias_std_pred,label=f'VarBias StdDev Pred X={val}',color=bpdc,alpha=0.3)
+
+plt.legend()
+plt.tight_layout()

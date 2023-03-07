@@ -8,7 +8,7 @@ from jax import random
 import matplotlib.pyplot as plt
 import arviz as az
 from src.model_fitting_functions import run_inference
-from src.examples_functions import tinygp_2process_model,truth_posterior_predictive,bias_posterior_predictive,posterior_predictive_realisations
+from src.examples_functions import create_levels,tinygp_2process_model,truth_posterior_predictive,bias_posterior_predictive,posterior_predictive_realisations
 
 plt.rcParams['lines.markersize'] = 3
 plt.rcParams['lines.linewidth'] = 0.4
@@ -65,30 +65,43 @@ fig, axs = plt.subplots(1, 3, figsize=(15, 4))
 plots = []
 variables = ['Y','Y2','Y3']
 titles = ['Truth','Bias','Climate']
-# vmin = min(ds.min().data_vars.values())
-# vmax = max(ds.max().data_vars.values())
+levels = create_levels(ds,0.25,0,center=True)
 
 for i,var,title in zip(range(1, 4), variables, titles):
     plt.subplot(1, 3, i)
     plots.append(
-        ds[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds[f'{var}'].plot.contourf(x='X1',y='X2',levels=levels,center=0)
     )
     plt.title(title)
 
-for i,var,da in zip([0,2],['Y','Y3'],[da_obs,da_climate]):
-    ax = axs.flatten()[i]
-    da.to_dataset().plot.scatter(x='X1',y='X2',hue=f'{var}',s=30, edgecolors='k',add_colorbar=False, ax=ax, add_title=False)
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
+axs[0].scatter(da_obs_stacked.dropna('X').X1, da_obs_stacked.dropna('X').X2, s=30, marker='x', c='k')
+axs[2].scatter(da_climate_stacked.X1, da_obs_stacked.X2, s=30, marker='+',c='k')
 
 # %%
-plt.figure(figsize=(5,3))
-val = 50
-ds['Y'].sel(X2=val).plot(label='Truth Slice')
-ds['Y2'].sel(X2=val).plot(label='Bias Slice')
-ds['Y3'].sel(X2=val).plot(label='Climate Slice')
+fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+ax.scatter(da_obs_stacked.dropna('X').X1, da_obs_stacked.dropna('X').X2, s=30, marker='x', c='k')
+ax.scatter(da_climate_stacked.X1, da_obs_stacked.X2, s=30, marker='+',c='k')
+
+# %%
+val = 52
+cdc = 'tab:orange' #climate_data_colour
+odc = 'tab:blue' #observation_data_colour
+bdc = 'tab:green'#bias_data_colour
+
+fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+
+da_obs_slice=da_obs.sel(X2=val)
+da_climate_slice=da_climate.sel(X2=val,method="nearest")
+ax.scatter(da_obs_slice.X1, da_obs_slice.data, s=30, marker='x',c=odc,label = f'Truth Observations X={da_obs_slice.X2.data}')
+ax.scatter(da_climate_slice.X1, da_climate_slice.data, s=30, marker='+',c=cdc,label = f'Climate Output X={da_climate_slice.X2.data}')
+
+ds_slice = ds.sel(X2=val)
+ds_slice['Y'].plot(label = f'Underlying Truth X={val}',c=odc)
+ds_slice['Y2'].plot(label = f'Underlying Bias X={val}',c=bdc)
+ds_slice['Y3'].plot(label = f'Underlying Climate X={val}',c=cdc)
+
 plt.legend()
-plt.title(f'1D Slice, X2={val}')
-plt.show()
+plt.tight_layout()
 
 # %%
 odata = da_obs_stacked.dropna('X').data
@@ -101,7 +114,6 @@ cx = np.array(list(map(np.array, da_climate_stacked.X.data)))
 mcmc_2process = run_inference(tinygp_2process_model, rng_key_, 1000, 2000, cx,cdata=cdata,ox=ox,odata=odata,noise=1e-5)
 
 # %%
-
 #Saving Output from MCMC
 outfile_dir = '/home/jez/Bias_Correction/data/Examples_Output/'
 idata_2process = az.from_numpyro(mcmc_2process)
@@ -137,67 +149,69 @@ fig, axs = plt.subplots(1, 3, figsize=(15, 4))
 plots = []
 variables = ['mean_truth','std_truth']
 titles = ['Mean Pred. - Truth','Stddev Pred. - Truth']
+truth_levels = create_levels(ds[['Y']],0.25,0,center=True)
+uncertainty_levels = create_levels(ds_predictions[['std_truth']],0.1,1)
 
 plt.subplot(1, 3, 1)
-plots.append(ds['Y'].plot.contourf(x='X1',y='X2',levels=50,ax=axs.flatten()[0]))
+plots.append(ds['Y'].plot.contourf(x='X1',y='X2',levels=truth_levels,ax=axs.flatten()[0]))
 plt.title('Truth')
 
-for i,var,title in zip(range(2, 4), variables, titles):
+for i,var,title,levels in zip(range(2, 4), variables, titles,[truth_levels,uncertainty_levels]):
     plt.subplot(1, 3, i)
     plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=levels)
     )
     plt.title(title)
-
-for i in [0,1,2]:
-    ax = axs.flatten()[i]
-    da_obs_stacked.dropna('X').to_dataset().plot.scatter(x='X1',y='X2',hue=None,s=30, edgecolors='k',add_colorbar=False, ax=ax, add_title=False,facecolors="none")
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
 
 # %%
 fig, axs = plt.subplots(1, 3, figsize=(15, 4))
 plots = []
 variables = ['mean_bias','std_bias']
 titles = ['Mean Pred. - Bias','Stddev Pred. - Bias']
+truth_levels = create_levels(ds[['Y2']],0.25,0,center=True)
+uncertainty_levels = create_levels(ds_predictions[['std_bias']],0.1,1)
 
 plt.subplot(1, 3, 1)
-plots.append(ds['Y2'].plot.contourf(x='X1',y='X2',levels=50,ax=axs.flatten()[0]))
-plt.title('Bias')
+plots.append(ds['Y2'].plot.contourf(x='X1',y='X2',levels=truth_levels,ax=axs.flatten()[0]))
+plt.title('Truth')
 
-for i,var,title in zip(range(2, 4), variables, titles):
+for i,var,title,levels in zip(range(2, 4), variables, titles,[truth_levels,uncertainty_levels]):
     plt.subplot(1, 3, i)
     plots.append(
-        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=50)
+        ds_predictions[f'{var}'].plot.contourf(x='X1',y='X2',levels=levels)
     )
     plt.title(title)
 
-for i in [0,1,2]:
-    ax = axs.flatten()[i]
-    da_obs_stacked.dropna('X').to_dataset().plot.scatter(x='X1',y='X2',hue=None,s=30, edgecolors='k',add_colorbar=False, ax=ax, add_title=False,facecolors="none")
-# https://docs.xarray.dev/en/stable/generated/xarray.plot.scatter.html
-
 # %%
 val = 52
+cdc = 'tab:orange' #climate_data_colour
+odc = 'tab:blue' #observation_data_colour
+bdc = 'tab:green'#bias_data_colour
+tpdc = 'tab:purple'#truth_prediction_data_colour
+bpdc = 'tab:olive'#bias_prediction_data_colour
+
+fig, ax = plt.subplots(1, 1, figsize=(8, 4))
 
 da_obs_slice=da_obs.sel(X2=val)
-da_obs_slice.to_dataset().plot.scatter(x='X1',y='Y',s=30,label=f'Observation X={val}')
 da_climate_slice=da_climate.sel(X2=val,method="nearest")
-da_climate_slice.to_dataset().plot.scatter(x='X1',y='Y3',s=30,label=f'Climate Data X={da_climate_slice.X2.data}')
+ax.scatter(da_obs_slice.X1, da_obs_slice.data, s=30, marker='x',c=odc,label = f'Truth Observations X={da_obs_slice.X2.data}')
+ax.scatter(da_climate_slice.X1, da_climate_slice.data, s=30, marker='+',c=cdc,label = f'Climate Output X={da_climate_slice.X2.data}')
 
 ds_slice = ds.sel(X2=val)
-
-ds_slice['Y'].plot(label = f'Truth X={val}')
-ds_slice['Y2'].plot(label = f'Bias X={val}')
-ds_slice['Y3'].plot(label = f'Climate X={val}')
+ds_slice['Y'].plot(label = f'Underlying Truth X={val}',c=odc)
+ds_slice['Y2'].plot(label = f'Underlying Bias X={val}',c=bdc)
+ds_slice['Y3'].plot(label = f'Underlying Climate X={val}',c=cdc)
 
 ds_predictions_slice = ds_predictions.sel(X2=val)
-x_slice = ds_predictions_slice.X1.data
-truth_pred_mean = ds_predictions_slice['mean_truth'].data
-truth_pred_std = ds_predictions_slice['std_truth'].data
-plt.plot(x_slice,truth_pred_mean,label=f'Truth Mean Pred X={val}',color='m',alpha=1.0,linewidth=2)
-plt.fill_between(x_slice,truth_pred_mean+truth_pred_std,truth_pred_mean-truth_pred_std,label=f'Truth StdDev Pred X={val}',color='m',alpha=0.3)
+truth_mean_pred = ds_predictions_slice['mean_truth'].data
+truth_std_pred = ds_predictions_slice['std_truth'].data
+bias_mean_pred = ds_predictions_slice['mean_bias'].data
+bias_std_pred = ds_predictions_slice['std_bias'].data
 
-plt.title(f'1D Slice, X2={val}')
+ax.plot(ds_predictions_slice.X1, truth_mean_pred, c=tpdc,label = f'Truth Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,truth_mean_pred+truth_std_pred,truth_mean_pred-truth_std_pred,label=f'Truth StdDev Pred X={val}',color=tpdc,alpha=0.3)
+ax.plot(ds_predictions_slice.X1, bias_mean_pred, c=bpdc,label = f'Bias Predictions X={val}')
+ax.fill_between(ds_predictions_slice.X1,bias_mean_pred+bias_std_pred,bias_mean_pred-bias_std_pred,label=f'Bias StdDev Pred X={val}',color=bpdc,alpha=0.3)
+
 plt.legend()
 plt.tight_layout()
-
