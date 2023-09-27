@@ -10,15 +10,26 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import arviz as az
 from scipy.stats import multivariate_normal
+from functools import partial
 
 jax.config.update("jax_enable_x64", True)
 
 ############# DATA GENERATION #############
+def mean_function(params,x):
+    mean = params["beta0"]+params["beta1"]*(x-50)+params["beta2"]*(x-50)**2
+    return(mean)
+
 def generate_underlying_data(scenario,rng_key):
     rng_key, rng_key_ = random.split(rng_key)
+
+    mean_params = {'beta0':scenario['t_mean_beta0'],
+                   'beta1':scenario['t_mean_beta1'],
+                   'beta2':scenario['t_mean_beta2']}
+    t_mean = partial(mean_function, mean_params)
+
     GP_T = GaussianProcess(
         scenario['t_variance'] * kernels.ExpSquared(scenario['t_lengthscale']),
-        scenario['X'],diag=scenario['jitter'],mean=scenario['t_mean'])
+        scenario['X'],diag=scenario['jitter'],mean=t_mean)
     GP_B = GaussianProcess(
         scenario['b_variance'] * kernels.ExpSquared(scenario['b_lengthscale']),
         scenario['X'],diag=scenario['jitter'],mean=scenario['b_mean'])
@@ -73,13 +84,17 @@ def run_inference(model,rng_key,num_warmup,num_samples,num_chains,*args,**kwargs
 def diagonal_noise(coord,noise):
     return(jnp.diag(jnp.full(coord.shape[0],noise)))
 
-def generate_obs_conditional_climate_dist(scenario,ckernel,cmean,cnoise_var,okernel,omean,onoise_var):
+def generate_obs_conditional_climate_dist(scenario,ckernel,cmeanfunc,cnoise_var,okernel,omeanfunc,onoise_var):
     ox = scenario['ox']
     cx = scenario['cx']
     cdata = scenario['cdata']
     y2 = cdata
-    u1 = jnp.full(ox.shape[0], omean)
-    u2 = jnp.full(cx.shape[0], cmean)
+
+    u1 = omeanfunc(ox)
+    u2 = cmeanfunc(cx)
+    # u1 = jnp.full(ox.shape[0], omean)
+    # u2 = jnp.full(cx.shape[0], cmean)
+
     k11 = okernel(ox,ox) + diagonal_noise(ox,onoise_var)
     k12 = okernel(ox,cx)
     k21 = okernel(cx,ox) 
@@ -99,10 +114,14 @@ def tinygp_2process_model(scenario):
    one of which also generates the observations and one of
    which generates bias in the climate model.
     """
+
     kern_var = numpyro.sample("kern_var", scenario['t_variance_prior'])
     lengthscale = numpyro.sample("lengthscale", scenario['t_lengthscale_prior'])
     kernel = kern_var * kernels.ExpSquared(lengthscale)
-    mean = numpyro.sample("mean", scenario['t_mean_prior'])
+    mean_params = {'beta0':numpyro.sample("beta0", scenario['t_mean_beta0_prior']),
+                   'beta1':numpyro.sample("beta1", scenario['t_mean_beta1_prior']),
+                   'beta2':numpyro.sample("beta2", scenario['t_mean_beta2_prior'])}
+    mean = partial(mean_function, mean_params)
 
     bkern_var = numpyro.sample("bkern_var", scenario['b_variance_prior'])
     blengthscale = numpyro.sample("blengthscale", scenario['b_lengthscale_prior'])
@@ -110,7 +129,8 @@ def tinygp_2process_model(scenario):
     bmean = numpyro.sample("bmean", scenario['b_mean_prior'])
 
     ckernel = kernel+bkernel
-    cmean = mean+bmean
+    # cmean = mean+bmean
+    cmean = lambda x : mean(x) + bmean
     cnoise_var = scenario['cnoise']**2
     cgp = GaussianProcess(ckernel, scenario['cx'], diag=cnoise_var, mean=cmean)
     numpyro.sample("climate_temperature", cgp.numpyro_dist(),obs=scenario['cdata'])
@@ -131,11 +151,22 @@ def generate_truth_predictive_dist(scenario,
                                    posterior_param_realisation):
     t_variance_realisation = posterior_param_realisation['t_variance_realisation']
     t_lengthscale_realisation = posterior_param_realisation['t_lengthscale_realisation']
-    t_mean_realisation = posterior_param_realisation['t_mean_realisation']
+
+    t_mean_beta0_realisation = posterior_param_realisation['t_mean_beta0_realisation']
+    t_mean_beta1_realisation = posterior_param_realisation['t_mean_beta1_realisation']
+    t_mean_beta2_realisation = posterior_param_realisation['t_mean_beta2_realisation']
+    mean_params = {'beta0':t_mean_beta0_realisation,
+                   'beta1':t_mean_beta1_realisation,
+                   'beta2':t_mean_beta2_realisation}
+    t_meanfunc = partial(mean_function, mean_params)
+
     b_variance_realisation = posterior_param_realisation['b_variance_realisation']
     b_lengthscale_realisation = posterior_param_realisation['b_lengthscale_realisation']
     b_mean_realisation = posterior_param_realisation['b_mean_realisation']
     onoise_realisation = posterior_param_realisation['onoise_realisation']
+
+    c_meanfunc = lambda x : t_meanfunc(x) + bmean
+
     nx = scenario['nx']
     ox = scenario['ox']
     cx = scenario['cx']
@@ -143,15 +174,15 @@ def generate_truth_predictive_dist(scenario,
     cnoise_var = scenario['cnoise']**2
     odata = scenario['odata']
     cdata = scenario['cdata']
-    omean = t_mean_realisation
+    # omean = t_mean_realisation
     bmean = b_mean_realisation
     kernelo = t_variance_realisation * kernels.ExpSquared(t_lengthscale_realisation)
     kernelb = b_variance_realisation * kernels.ExpSquared(b_lengthscale_realisation)
     onoise_var = onoise_realisation**2
 
     y2 = jnp.hstack([odata,cdata]) 
-    u1 = jnp.full(nx.shape[0], omean)
-    u2 = jnp.hstack([jnp.full(ox.shape[0], omean),jnp.full(cx.shape[0], omean+bmean)])
+    u1 = t_meanfunc(nx)
+    u2 = jnp.hstack([t_meanfunc(ox),c_meanfunc(cx)])
     k11 = kernelo(nx,nx) + diagonal_noise(nx,jitter)
     k12 = jnp.hstack([kernelo(nx,ox),kernelo(nx,cx)])
     k21 = jnp.vstack([kernelo(ox,nx),kernelo(cx,nx)])
@@ -175,11 +206,22 @@ def generate_bias_predictive_dist(scenario,
                                    posterior_param_realisation):
     t_variance_realisation = posterior_param_realisation['t_variance_realisation']
     t_lengthscale_realisation = posterior_param_realisation['t_lengthscale_realisation']
-    t_mean_realisation = posterior_param_realisation['t_mean_realisation']
+
+    t_mean_beta0_realisation = posterior_param_realisation['t_mean_beta0_realisation']
+    t_mean_beta1_realisation = posterior_param_realisation['t_mean_beta1_realisation']
+    t_mean_beta2_realisation = posterior_param_realisation['t_mean_beta2_realisation']
+    mean_params = {'beta0':t_mean_beta0_realisation,
+                   'beta1':t_mean_beta1_realisation,
+                   'beta2':t_mean_beta2_realisation}
+    t_meanfunc = partial(mean_function, mean_params)
+
     b_variance_realisation = posterior_param_realisation['b_variance_realisation']
     b_lengthscale_realisation = posterior_param_realisation['b_lengthscale_realisation']
     b_mean_realisation = posterior_param_realisation['b_mean_realisation']
     onoise_realisation = posterior_param_realisation['onoise_realisation']
+
+    c_meanfunc = lambda x : t_meanfunc(x) + bmean
+
     nx = scenario['nx']
     ox = scenario['ox']
     cx = scenario['cx']
@@ -187,7 +229,7 @@ def generate_bias_predictive_dist(scenario,
     cnoise_var = scenario['cnoise']**2
     odata = scenario['odata']
     cdata = scenario['cdata']
-    omean = t_mean_realisation
+    # omean = t_mean_realisation
     bmean = b_mean_realisation
     kernelo = t_variance_realisation * kernels.ExpSquared(t_lengthscale_realisation)
     kernelb = b_variance_realisation * kernels.ExpSquared(b_lengthscale_realisation)
@@ -195,7 +237,7 @@ def generate_bias_predictive_dist(scenario,
 
     y2 = jnp.hstack([odata,cdata]) 
     u1 = jnp.full(nx.shape[0], bmean)
-    u2 = jnp.hstack([jnp.full(ox.shape[0], omean),jnp.full(cx.shape[0], omean+bmean)])
+    u2 = jnp.hstack([t_meanfunc(ox),c_meanfunc(cx)])
     k11 = kernelb(nx,nx) + diagonal_noise(nx,jitter)
     k12 = jnp.hstack([jnp.full((len(nx),len(ox)),0),kernelb(nx,cx)])
     k21 = jnp.vstack([jnp.full((len(ox),len(nx)),0),kernelb(cx,nx)])
@@ -226,7 +268,9 @@ def generate_posterior_predictive_realisations(
             'iteration':iteration,
             't_variance_realisation': posterior['kern_var'].data[0,:][i],
             't_lengthscale_realisation': posterior['lengthscale'].data[0,:][i],
-            't_mean_realisation': posterior['mean'].data[0,:][i],
+            't_mean_beta0_realisation': posterior['beta0'].data[0,:][i],
+            't_mean_beta1_realisation': posterior['beta1'].data[0,:][i],
+            't_mean_beta2_realisation': posterior['beta2'].data[0,:][i],
             'b_variance_realisation': posterior['bkern_var'].data[0,:][i],
             'b_lengthscale_realisation': posterior['blengthscale'].data[0,:][i],
             'b_mean_realisation': posterior['bmean'].data[0,:][i],
@@ -329,20 +373,20 @@ def plot_underlying_data_2d(scenario,axs,ms):
     for value in x2_markers[:-1]:
         axs[2].axhline(value,CX2_min,CX2_max,linestyle='--',color='k')
 
-def plot_priors(scenario,prior_keys,axs,rng_key):
+def plot_priors(scenario,prior_keys,axs,rng_key,vlinewidth):
     for key,ax in zip(prior_keys,axs):
         variable = key.split('_prior')[0]
         value = scenario[variable]
         prior_sample = scenario[key].sample(rng_key,(10000,))
         prior_sample = remove_outliers(prior_sample)
-        ax.hist(prior_sample,density=True,bins=100,alpha=0.8)
-        ax.axvline(x=value, ymin=0, ymax=1,linestyle='--',color='k')
+        ax.hist(prior_sample,density=True,bins=100,alpha=0.6)
+        ax.axvline(x=value, ymin=0, ymax=1,linestyle='--',color='k',linewidth=vlinewidth)
 
 def plot_posteriors(posterior,posterior_keys,axs):
     for key,ax in zip(posterior_keys,axs):
         posterior_sample = posterior[key].data.reshape(-1)
         posterior_sample = remove_outliers(posterior_sample)
-        ax.hist(posterior_sample,density=True,bins=100,alpha=0.8)
+        ax.hist(posterior_sample,density=True,bins=100,alpha=0.6)
 
 def plot_prior_and_posteriors(posterior,posterior_keys,axs):
     for key,ax in zip(posterior_keys,axs):

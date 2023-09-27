@@ -1,20 +1,17 @@
-# %%
-
-#Importing Packages
+# %% Importing Packages
 import numpy as np
 import numpyro.distributions as dist
 from numpy.random import RandomState
-from tinygp import kernels, GaussianProcess
 import jax
 from jax import random
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from src.simulated_data_functions_hierarchical import generate_underlying_data_hierarchical
-from src.simulated_data_functions_hierarchical import plot_underlying_data_mean_1d
-from src.simulated_data_functions_hierarchical import plot_underlying_data_std_1d
-from src.simulated_data_functions_hierarchical import plot_pdfs_1d
-from src.simulated_data_functions_hierarchical import plot_underlying_data_2d
+from src.hierarchical.data_generation_functions import generate_underlying_data_hierarchical
+from src.hierarchical.plotting_functions import plot_underlying_data_mean_1d
+from src.hierarchical.plotting_functions import plot_underlying_data_std_1d
+from src.hierarchical.plotting_functions import plot_pdfs_1d
+from src.hierarchical.plotting_functions import plot_underlying_data_2d
 
 plt.rcParams['lines.markersize'] = 3
 plt.rcParams['lines.linewidth'] = 0.4
@@ -25,7 +22,7 @@ jax.config.update("jax_enable_x64", True)
 
 outpath = '/home/jez/DSNE_ice_sheets/Jez/Bias_Correction/Scenarios/'
 
-# %%
+# %% Specifying parameters for scenario
 min_x,max_x = 0,100
 X = jnp.arange(min_x,max_x,0.1)
 
@@ -85,17 +82,17 @@ scenario_2d.update(
      'nx':X}
 )
 
-# %%
+# %% Generating the underlying simulated data
 rng_key = random.PRNGKey(0)
 generate_underlying_data_hierarchical(scenario_base,rng_key)
 generate_underlying_data_hierarchical(scenario_2d,rng_key)
 
-# %%
+# %% Plotting 1D hierarchical data
 fig, axs = plt.subplots(2, 1, figsize=(15, 10))
-plot_underlying_data_mean_1d(scenario_base,axs[0])
-plot_underlying_data_std_1d(scenario_base,axs[1])
+plot_underlying_data_mean_1d(scenario_base,axs[0],ms=20)
+plot_underlying_data_std_1d(scenario_base,axs[1],ms=20)
 
-# %%
+# %% Plotting 2D hierarchical data
 scenario_2d['STDEV_T'] = jnp.sqrt(jnp.exp(scenario_2d['LOGVAR_T']))
 scenario_2d['STDEV_B'] = jnp.sqrt(jnp.exp(scenario_2d['LOGVAR_B']))
 scenario_2d['STDEV_C'] = jnp.sqrt(jnp.exp(scenario_2d['LOGVAR_C']))
@@ -107,7 +104,7 @@ fig, axs = plt.subplots(2, 3, figsize=(15, 8))
 plot_underlying_data_2d(scenario_2d,variables_mean,axs[0],1,True,'RdBu_r')
 plot_underlying_data_2d(scenario_2d,variables_std,axs[1],1,None,'viridis')
 
-# %%
+# %% Plotting example PDFs
 fig, ax = plt.subplots(1, 1, figsize=(15, 5))
 plot_pdfs_1d(scenario_base,ax,100)
 

@@ -12,32 +12,33 @@ rng_key = random.PRNGKey(0)
 rng_key, rng_key_ = random.split(rng_key)
 jax.config.update("jax_enable_x64", True)
 
-from src.simulated_data_functions import generate_posterior_lima
-from src.simulated_data_functions import generate_posterior_predictive_realisations_lima
-from src.simulated_data_functions import plot_predictions_1d
+from src.non_hierarchical.lima_functions import generate_posterior_lima
+from src.non_hierarchical.lima_functions import generate_posterior_predictive_realisations_lima
+from src.non_hierarchical.plotting_functions import plot_predictions_1d
 
 inpath = '/home/jez/DSNE_ice_sheets/Jez/Bias_Correction/Scenarios/'
 
-# %%
+# %% Loading data
 scenario_base = np.load(f'{inpath}scenario_base.npy',allow_pickle='TRUE').item()
 scenario_ampledata = np.load(f'{inpath}scenario_ampledata.npy',allow_pickle='TRUE').item()
 scenario_sparse_smooth = np.load(f'{inpath}scenario_sparse_smooth.npy',allow_pickle='TRUE').item()
 scenario_sparse_complex = np.load(f'{inpath}scenario_sparse_complex.npy',allow_pickle='TRUE').item()
 
-# %%
+# %% Fitting the model and generating the posterior (~30 seconds)
 scenarios = [scenario_ampledata,scenario_sparse_smooth,scenario_sparse_complex]
 for scenario in scenarios:
     generate_posterior_lima(scenario,rng_key,1000,2000,1)
 
-# %%
+# %% Creating posterior predictive realisations
 for scenario in scenarios:
     generate_posterior_predictive_realisations_lima(scenario,20,20,rng_key)
 
-# %%
+# %% Saving the output
 np.save(f'{inpath}scenario_ampledata_lima.npy', scenario_ampledata) 
 np.save(f'{inpath}scenario_sparse_smooth_lima.npy', scenario_sparse_smooth) 
 np.save(f'{inpath}scenario_sparse_complex_lima.npy', scenario_sparse_complex) 
-# %%
+
+# %% Plotting the posterior predictive
 legend_fontsize = 8
 cm = 1/2.54
 fig, axs = plt.subplots(3,1,figsize=(16*cm, 15.0*cm),dpi= 300)
