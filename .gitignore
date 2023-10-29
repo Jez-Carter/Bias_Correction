@@ -1,3 +1,9 @@
+Legacy_Code/
+scripts/Data_Generation_and_Model_Fitting/Spatial_with_Mean_Function/
+tests/
+src/non_hierarchical_mean_function/
+plot_style.txt
+
 src/__pycache__/__init__.cpython-39.pyc
 src/__pycache__/examples_functions.cpython-39.pyc
 src/__pycache__/helper_functions.cpython-39.pyc
@@ -6,6 +12,6 @@ src.egg-info/dependency_links.txt
 src.egg-info/PKG-INFO
 src.egg-info/SOURCES.txt
 src.egg-info/top_level.txt
-Legacy_Code/data
-Legacy_Code/Model_DAGs
-data
+src/__pycache__/
+src/hierarchical/__pycache__/
+src/non_hierarchical/__pycache__/
