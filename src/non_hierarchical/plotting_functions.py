@@ -94,7 +94,7 @@ def plot_predictions_1d(x, scenario, key, ax, ms=None, ylims=None, color=None):
     ax.legend()
 
 
-def plot_underlying_data_1d_lima(scenario, ax, ms):
+def plot_underlying_data_1d_singleprocess(scenario, ax, ms):
     ax.plot(scenario["X"], scenario["T"], label="Truth", alpha=0.6)
     ax.scatter(
         scenario["ox"],

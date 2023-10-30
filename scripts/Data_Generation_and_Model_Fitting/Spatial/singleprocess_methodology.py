@@ -12,9 +12,9 @@ rng_key = random.PRNGKey(0)
 rng_key, rng_key_ = random.split(rng_key)
 jax.config.update("jax_enable_x64", True)
 
-from src.non_hierarchical.lima_functions import generate_posterior_lima
-from src.non_hierarchical.lima_functions import (
-    generate_posterior_predictive_realisations_lima,
+from src.non_hierarchical.singleprocess_functions import generate_posterior_singleprocess
+from src.non_hierarchical.singleprocess_functions import (
+    generate_posterior_predictive_realisations_singleprocess,
 )
 from src.non_hierarchical.plotting_functions import plot_predictions_1d
 
@@ -35,18 +35,18 @@ scenario_sparse_complex = np.load(
 # %% Fitting the model and generating the posterior (~30 seconds)
 scenarios = [scenario_ampledata, scenario_sparse_smooth, scenario_sparse_complex]
 for scenario in scenarios:
-    generate_posterior_lima(scenario, rng_key, 1000, 2000, 1)
+    generate_posterior_singleprocess(scenario, rng_key, 1000, 2000, 1)
 
 # %% Creating posterior predictive realisations
 for scenario in scenarios:
-    generate_posterior_predictive_realisations_lima(
+    generate_posterior_predictive_realisations_singleprocess(
         scenario["cx"], scenario, 20, 20, rng_key
     )
 
 # %% Saving the output
-np.save(f"{inpath}scenario_ampledata_lima.npy", scenario_ampledata)
-np.save(f"{inpath}scenario_sparse_smooth_lima.npy", scenario_sparse_smooth)
-np.save(f"{inpath}scenario_sparse_complex_lima.npy", scenario_sparse_complex)
+np.save(f"{inpath}scenario_ampledata_singleprocess.npy", scenario_ampledata)
+np.save(f"{inpath}scenario_sparse_smooth_singleprocess.npy", scenario_sparse_smooth)
+np.save(f"{inpath}scenario_sparse_complex_singleprocess.npy", scenario_sparse_complex)
 
 # %% Plotting the posterior predictive
 legend_fontsize = 8
@@ -70,7 +70,7 @@ for scenario, ax in zip(scenarios, axs):
     )
     plot_predictions_1d(
         scenario,
-        "truth_posterior_predictive_realisations_lima",
+        "truth_posterior_predictive_realisations_singleprocess",
         ax,
         ms=20,
         color="tab:blue",

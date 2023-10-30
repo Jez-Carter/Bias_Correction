@@ -8,7 +8,7 @@ from scipy.stats import gamma
 import pandas as pd
 import arviz as az
 from src.non_hierarchical.plotting_functions import plot_underlying_data_1d
-from src.non_hierarchical.plotting_functions import plot_underlying_data_1d_lima
+from src.non_hierarchical.plotting_functions import plot_underlying_data_1d_singleprocess
 from src.non_hierarchical.plotting_functions import plot_predictions_1d
 
 rng_key = random.PRNGKey(3)
@@ -38,14 +38,14 @@ scenario_sparse_smooth = np.load(
 scenario_sparse_complex = np.load(
     f"{inpath}scenario_sparse_complex.npy", allow_pickle="TRUE"
 ).item()
-scenario_ampledata_lima = np.load(
-    f"{inpath}scenario_ampledata_lima.npy", allow_pickle="TRUE"
+scenario_ampledata_singleprocess = np.load(
+    f"{inpath}scenario_ampledata_singleprocess.npy", allow_pickle="TRUE"
 ).item()
-scenario_sparse_smooth_lima = np.load(
-    f"{inpath}scenario_sparse_smooth_lima.npy", allow_pickle="TRUE"
+scenario_sparse_smooth_singleprocess = np.load(
+    f"{inpath}scenario_sparse_smooth_singleprocess.npy", allow_pickle="TRUE"
 ).item()
-scenario_sparse_complex_lima = np.load(
-    f"{inpath}scenario_sparse_complex_lima.npy", allow_pickle="TRUE"
+scenario_sparse_complex_singleprocess = np.load(
+    f"{inpath}scenario_sparse_complex_singleprocess.npy", allow_pickle="TRUE"
 ).item()
 
 # %% Table: Parameters used to generate the data
@@ -160,24 +160,24 @@ prior_keys = [
 ]
 
 scenarios = [scenario_ampledata, scenario_sparse_smooth, scenario_sparse_complex]
-scenarios_lima = [
-    scenario_ampledata_lima,
-    scenario_sparse_smooth_lima,
-    scenario_sparse_complex_lima,
+scenarios_singleprocess = [
+    scenario_ampledata_singleprocess,
+    scenario_sparse_smooth_singleprocess,
+    scenario_sparse_complex_singleprocess,
 ]
 
-for scenario, scenario_lima, values in zip(scenarios, scenarios_lima, values_list):
+for scenario, scenario_singleprocess, values in zip(scenarios, scenarios_singleprocess, values_list):
     df = az.summary(scenario["mcmc"].posterior, hdi_prob=0.95)
     df = df.reindex(desired_index_order)
     df = df.set_index(np.array(parameters))
     df = df[desired_columns]
     df.columns = columns
 
-    df_lima = az.summary(scenario_lima["mcmc_lima"].posterior, hdi_prob=0.95)
-    df_lima = df_lima.reindex(desired_index_order)
-    df_lima = df_lima.set_index(np.array(parameters))
-    df_lima = df_lima[desired_columns]
-    df_lima.columns = columns
+    df_singleprocess = az.summary(scenario_singleprocess["mcmc_singleprocess"].posterior, hdi_prob=0.95)
+    df_singleprocess = df_singleprocess.reindex(desired_index_order)
+    df_singleprocess = df_singleprocess.set_index(np.array(parameters))
+    df_singleprocess = df_singleprocess[desired_columns]
+    df_singleprocess.columns = columns
 
     expectations = []
     standard_deviations = []
@@ -211,10 +211,10 @@ for scenario, scenario_lima, values in zip(scenarios, scenarios_lima, values_lis
     df_prior = pd.DataFrame(data=d, index=parameters)
 
     df["Distribution"] = "Po.2"
-    df_lima["Distribution"] = "Po.1"
+    df_singleprocess["Distribution"] = "Po.1"
     df_prior["Distribution"] = "Pr."
 
-    df_conc = pd.concat([df, df_lima, df_prior])
+    df_conc = pd.concat([df, df_singleprocess, df_prior])
     df_conc = df_conc.set_index([df_conc.index, "Distribution"])
     df_conc = df_conc.unstack()
     df_conc = df_conc.reindex(parameters)
@@ -231,20 +231,20 @@ for scenario, scenario_lima, values in zip(scenarios, scenarios_lima, values_lis
 # %% Figure: Visualising posterior predictives
 fig, axs = plt.subplots(3, 2, figsize=(16 * cm, 15.0 * cm), dpi=300)
 scenarios = [
-    scenario_ampledata_lima,
-    scenario_sparse_smooth_lima,
-    scenario_sparse_complex_lima,
+    scenario_ampledata_singleprocess,
+    scenario_sparse_smooth_singleprocess,
+    scenario_sparse_complex_singleprocess,
 ]
 for scenario, ax in zip(scenarios, axs[:, 0]):
     plot_predictions_1d(
         scenario["cx"],
         scenario,
-        "truth_posterior_predictive_realisations_lima",
+        "truth_posterior_predictive_realisations_singleprocess",
         ax,
         ms=20,
         color="tab:purple",
     )
-    plot_underlying_data_1d_lima(scenario, ax, ms=20)
+    plot_underlying_data_1d_singleprocess(scenario, ax, ms=20)
 
 scenarios = [scenario_ampledata, scenario_sparse_smooth, scenario_sparse_complex]
 for scenario, ax in zip(scenarios, axs[:, 1]):
@@ -330,9 +330,9 @@ fig.savefig(f"{out_path}fig06.pdf", dpi=300, bbox_inches="tight")
 # %% Table of R2 Scores
 scenario_names = ["Scenario 1", "Scenario 2", "Scenario 3"]
 scenario_pairs = [
-    [scenario_ampledata, scenario_ampledata_lima],
-    [scenario_sparse_smooth, scenario_sparse_smooth_lima],
-    [scenario_sparse_complex, scenario_sparse_complex_lima],
+    [scenario_ampledata, scenario_ampledata_singleprocess],
+    [scenario_sparse_smooth, scenario_sparse_smooth_singleprocess],
+    [scenario_sparse_complex, scenario_sparse_complex_singleprocess],
 ]
 
 r2_scores_2process_exp = []
@@ -343,13 +343,13 @@ r2_scores_1process_std = []
 for scenario_pair, scenario_name in zip(scenario_pairs, scenario_names):
     y_true = scenario_pair[0]["cdata_o"]
     y_pred = scenario_pair[0]["truth_posterior_predictive_realisations"]
-    y_pred_lima = scenario_pair[1]["truth_posterior_predictive_realisations_lima"]
+    y_pred_singleprocess = scenario_pair[1]["truth_posterior_predictive_realisations_singleprocess"]
 
     r2_2process = az.r2_score(y_true, y_pred)
     r2_scores_2process_exp.append(r2_2process[0])
     r2_scores_2process_std.append(r2_2process[1])
 
-    r2_1process = az.r2_score(y_true, y_pred_lima)
+    r2_1process = az.r2_score(y_true, y_pred_singleprocess)
     r2_scores_1process_exp.append(r2_1process[0])
     r2_scores_1process_std.append(r2_1process[1])
 

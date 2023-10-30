@@ -76,9 +76,9 @@ axs = [
 rng_key = random.PRNGKey(5)
 plot_priors(scenario, prior_keys, axs, rng_key, 0.75)
 plot_posteriors(scenario["mcmc"].posterior, posterior_keys, axs)
-lima_posterior_keys = [posterior_keys[i] for i in [0, 1, 2]]
-lima_axs = [axs[i] for i in [0, 1, 2]]
-# plot_posteriors(scenario_lima['mcmc_lima'].posterior,lima_posterior_keys,lima_axs)
+singleprocess_posterior_keys = [posterior_keys[i] for i in [0, 1, 2]]
+singleprocess_axs = [axs[i] for i in [0, 1, 2]]
+# plot_posteriors(scenario_singleprocess['mcmc_singleprocess'].posterior,singleprocess_posterior_keys,singleprocess_axs)
 
 for ax, title in zip(axs, titles):
     ax.set_title(title, pad=3, loc="left", fontsize=8)
