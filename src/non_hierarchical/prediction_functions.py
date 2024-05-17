@@ -113,7 +113,7 @@ def generate_bias_predictive_dist(nx, scenario, posterior_param_realisation):
 
 
 def generate_posterior_predictive_realisations(
-    nx, scenario, num_parameter_realisations, num_posterior_pred_realisations
+    nx, scenario, num_parameter_realisations, num_posterior_pred_realisations,rng_key
 ):
     posterior = scenario["mcmc"].posterior
     truth_posterior_predictive_realisations = []
@@ -141,13 +141,18 @@ def generate_posterior_predictive_realisations(
 
         # truth_predictive_realisations = truth_predictive_dist.rvs(num_posterior_pred_realisations)
         # bias_predictive_realisations = bias_predictive_dist.rvs(num_posterior_pred_realisations)
-        rng_key = random.PRNGKey(0)
+        # rng_key = random.PRNGKey(0)
+        
         truth_predictive_realisations = truth_predictive_dist.sample(
             rng_key, sample_shape=(num_posterior_pred_realisations,)
         )
+        rng_key, rng_key_ = random.split(rng_key)
+
         bias_predictive_realisations = bias_predictive_dist.sample(
             rng_key, sample_shape=(num_posterior_pred_realisations,)
         )
+        rng_key, rng_key_ = random.split(rng_key)
+
         truth_posterior_predictive_realisations.append(truth_predictive_realisations)
         bias_posterior_predictive_realisations.append(bias_predictive_realisations)
 

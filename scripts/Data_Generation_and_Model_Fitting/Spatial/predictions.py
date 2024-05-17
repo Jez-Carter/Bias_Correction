@@ -49,3 +49,23 @@ generate_posterior_predictive_realisations(
 # np.save(f'{inpath}scenario_sparse_smooth.npy', scenario_sparse_smooth)
 # np.save(f'{inpath}scenario_sparse_complex.npy', scenario_sparse_complex)
 # np.save(f'{inpath}scenario_2d.npy', scenario_2d)
+
+
+# %% Adjustment Check
+
+generate_posterior_predictive_realisations(
+    scenario_ampledata["cx"], scenario_ampledata, 100, 1,rng_key
+)
+rng_key, rng_key_ = random.split(rng_key)
+generate_posterior_predictive_realisations(
+    scenario_sparse_smooth["cx"], scenario_sparse_smooth, 100, 1,rng_key
+)
+rng_key, rng_key_ = random.split(rng_key)
+generate_posterior_predictive_realisations(
+    scenario_sparse_complex["cx"], scenario_sparse_complex, 100, 1,rng_key
+)
+
+np.save(f'{inpath}scenario_ampledata_adj.npy', scenario_ampledata)
+np.save(f'{inpath}scenario_sparse_smooth_adj.npy', scenario_sparse_smooth)
+np.save(f'{inpath}scenario_sparse_complex_adj.npy', scenario_sparse_complex)
+# %%
